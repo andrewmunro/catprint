@@ -23,6 +23,7 @@ import (
 
 	"github.com/synestry/catprint/jobs"
 	"github.com/synestry/catprint/printer"
+	"github.com/synestry/catprint/validate"
 )
 
 //go:embed static/*
@@ -65,9 +66,10 @@ type printTextReq struct {
 }
 
 type printResp struct {
-	JobID  string `json:"job_id"`
-	Status string `json:"status"`
-	Error  string `json:"error,omitempty"`
+	JobID      string               `json:"job_id"`
+	Status     string               `json:"status"`
+	Error      string               `json:"error,omitempty"`
+	Violations []validate.Violation `json:"violations,omitempty"`
 }
 
 // composeMarkdown prepends an optional title as an H1.
@@ -89,6 +91,10 @@ func (d Deps) handlePrintText(w http.ResponseWriter, r *http.Request) {
 	md := composeMarkdown(req.Title, req.Content)
 	if strings.TrimSpace(md) == "" {
 		writeErr(w, http.StatusBadRequest, "empty content")
+		return
+	}
+	if res := validate.Validate(md); !res.OK() {
+		writeJSON(w, http.StatusUnprocessableEntity, printResp{Error: res.Error, Violations: res.Violations})
 		return
 	}
 	d.enqueueAndRespond(w, "web", md)
@@ -117,7 +123,12 @@ func (d Deps) handlePrintShare(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "nothing shared")
 		return
 	}
-	// Share target is a navigation; enqueue then redirect back to the UI.
+	// Share target is a navigation; validate then enqueue, redirect back to
+	// the UI with a flag so the page can surface the outcome.
+	if res := validate.Validate(md); !res.OK() {
+		http.Redirect(w, r, "/?shared=invalid", http.StatusSeeOther)
+		return
+	}
 	if _, err := d.Queue.Submit("web", md); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return

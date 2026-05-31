@@ -154,7 +154,10 @@ async function doPrint() {
       body: JSON.stringify({content, title})
     });
     const j = await res.json();
-    if (j.error) { toast('error: ' + j.error); }
+    if (j.violations && j.violations.length) {
+      const v = j.violations[0];
+      toast(v.line ? `line ${v.line}: ${v.issue}` : v.issue);
+    } else if (j.error) { toast('error: ' + j.error); }
     else {
       toast('job ' + j.status);
       if (j.status === 'sent') { $('content').value = ''; $('title').value = ''; }
@@ -173,7 +176,9 @@ async function reprint(id) {
 }
 
 $('printBtn').onclick = doPrint;
-if (new URLSearchParams(location.search).get('shared')) toast('shared to printer');
+const shared = new URLSearchParams(location.search).get('shared');
+if (shared === 'invalid') toast('shared content rejected (too long or unsupported)');
+else if (shared) toast('shared to printer');
 
 refreshStatus(); refreshJobs();
 setInterval(() => { refreshStatus(); refreshJobs(); }, 5000);
