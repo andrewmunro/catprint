@@ -100,6 +100,13 @@
   /* 384px paper rendered at 2x device px; cap display width, crisp pixels */
   .paper img { width: 100%; max-width: 384px; image-rendering: pixelated; display: block; }
   .paper.stale { opacity: 0.45; transition: opacity .15s; }
+  .imgrow { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+  .filebtn {
+    display: inline-block; background: var(--line); color: var(--ink);
+    padding: 8px 12px; border-radius: 10px; font-size: 0.85rem; font-weight: 600;
+    cursor: pointer; margin: 0;
+  }
+  #imageName { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -111,6 +118,12 @@
 
   <label for="content">Markdown</label>
   <textarea id="content" placeholder="- [ ] Milk&#10;- [ ] Eggs&#10;- [x] Bread"></textarea>
+
+  <div class="imgrow">
+    <label class="filebtn">📷 Image…<input type="file" id="imageInput" accept="image/png,image/jpeg,image/gif,image/bmp" hidden></label>
+    <span id="imageName" class="sub"></span>
+    <button id="clearImage" class="reprint" hidden>clear</button>
+  </div>
 
   <button class="primary" id="printBtn">🖨 Print</button>
 
@@ -186,6 +199,7 @@ function openLightbox(src) {
 $('lightbox').onclick = () => $('lightbox').classList.remove('show');
 
 async function doPrint() {
+  if (selectedImage) { await printImage(); return; }
   const content = $('content').value;
   const title = $('title').value;
   if (!content.trim() && !title.trim()) { toast('nothing to print'); return; }
@@ -208,6 +222,59 @@ async function doPrint() {
   $('printBtn').disabled = false;
   refreshJobs(); refreshStatus();
 }
+
+async function printImage() {
+  $('printBtn').disabled = true;
+  try {
+    const fd = new FormData(); fd.append('image', selectedImage);
+    const res = await fetch('/print/image', { method: 'POST', body: fd });
+    const j = await res.json();
+    if (j.error) { toast('error: ' + j.error); }
+    else {
+      toast('job ' + j.status);
+      if (j.status === 'sent') clearImage();
+    }
+  } catch { toast('request failed'); }
+  $('printBtn').disabled = false;
+  refreshJobs(); refreshStatus();
+}
+
+// --- image selection ---
+let selectedImage = null;
+function clearImage() {
+  selectedImage = null;
+  $('imageInput').value = '';
+  $('imageName').textContent = '';
+  $('clearImage').hidden = true;
+  schedulePreview(); // fall back to text preview
+}
+$('imageInput').addEventListener('change', async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  selectedImage = f;
+  $('imageName').textContent = f.name;
+  $('clearImage').hidden = false;
+  // Render dithered preview.
+  $('paperWrap').classList.add('stale');
+  const seq = ++previewSeq;
+  try {
+    const fd = new FormData(); fd.append('image', f);
+    const res = await fetch('/preview/image', { method: 'POST', body: fd });
+    if (seq !== previewSeq) return;
+    if (res.ok) {
+      const blob = await res.blob();
+      if (previewURL) URL.revokeObjectURL(previewURL);
+      previewURL = URL.createObjectURL(blob);
+      $('previewImg').src = previewURL; $('previewImg').hidden = false; $('previewHint').hidden = true;
+    } else {
+      const j = await res.json().catch(() => ({}));
+      $('previewImg').hidden = true; $('previewHint').hidden = false;
+      $('previewHint').textContent = j.error || 'cannot preview image';
+    }
+  } catch { toast('preview failed'); }
+  $('paperWrap').classList.remove('stale');
+});
+$('clearImage').onclick = clearImage;
 
 async function reprint(id) {
   try {

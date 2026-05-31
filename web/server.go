@@ -15,8 +15,11 @@ package web
 import (
 	"context"
 	"embed"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"image/png"
+	"io"
 	"io/fs"
 	"net/http"
 	"strings"
@@ -54,8 +57,10 @@ func Handler(d Deps) http.Handler {
 	})
 
 	mux.HandleFunc("POST /print/text", d.handlePrintText)
+	mux.HandleFunc("POST /print/image", d.handlePrintImage)
 	mux.HandleFunc("POST /print/share", d.handlePrintShare)
 	mux.HandleFunc("POST /preview", d.handlePreview)
+	mux.HandleFunc("POST /preview/image", d.handlePreviewImage)
 	mux.HandleFunc("GET /status", d.handleStatus)
 	mux.HandleFunc("GET /jobs", d.handleJobs)
 	mux.HandleFunc("GET /jobs/{id}/preview", d.handleJobPreview)
@@ -102,6 +107,60 @@ func (d Deps) handlePrintText(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d.enqueueAndRespond(w, "web", md)
+}
+
+// readImageUpload pulls image bytes from either a multipart "image" file or a
+// JSON {base64_image} body, and returns a canonical image-job data URI.
+func readImageUpload(r *http.Request) (string, error) {
+	ct := r.Header.Get("Content-Type")
+	if strings.HasPrefix(ct, "multipart/form-data") {
+		f, _, err := r.FormFile("image")
+		if err != nil {
+			return "", fmt.Errorf("no image file")
+		}
+		defer f.Close()
+		raw, err := io.ReadAll(io.LimitReader(f, 16<<20)) // 16 MB cap
+		if err != nil {
+			return "", err
+		}
+		return render.NormalizeImageInput(base64.StdEncoding.EncodeToString(raw))
+	}
+	var body struct {
+		Base64Image string `json:"base64_image"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		return "", fmt.Errorf("invalid json")
+	}
+	return render.NormalizeImageInput(body.Base64Image)
+}
+
+// handlePrintImage accepts an uploaded image (multipart or base64 JSON),
+// dithers it, and enqueues it.
+func (d Deps) handlePrintImage(w http.ResponseWriter, r *http.Request) {
+	content, err := readImageUpload(r)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	d.enqueueAndRespond(w, "web", content)
+}
+
+// handlePreviewImage dithers an uploaded image and returns the PNG preview
+// without enqueuing.
+func (d Deps) handlePreviewImage(w http.ResponseWriter, r *http.Request) {
+	content, err := readImageUpload(r)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	img, err := render.RenderContent(content, render.DefaultChrome("web"))
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = png.Encode(w, img)
 }
 
 // handlePreview renders the markdown to a PNG exactly as it would print
@@ -259,6 +318,9 @@ func (d Deps) handleReprint(w http.ResponseWriter, r *http.Request) {
 }
 
 func firstLine(s string) string {
+	if render.IsImageJob(s) {
+		return "🖼 image"
+	}
 	for _, ln := range strings.Split(s, "\n") {
 		ln = strings.TrimSpace(strings.TrimLeft(ln, "#-*[ ]x"))
 		if ln != "" {

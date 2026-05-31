@@ -93,7 +93,7 @@ func main() {
 }
 
 func renderForQueue(content string) (*image.Gray, error) {
-	return render.RenderMarkdown(content, render.DefaultChrome("mcp"))
+	return render.RenderContent(content, render.DefaultChrome("print"))
 }
 
 func getenv(k, def string) string {

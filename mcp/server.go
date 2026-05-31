@@ -12,6 +12,7 @@ import (
 
 	"github.com/synestry/catprint/jobs"
 	"github.com/synestry/catprint/printer"
+	"github.com/synestry/catprint/render"
 	"github.com/synestry/catprint/validate"
 )
 
@@ -38,7 +39,7 @@ func New(d Deps) *mcpsdk.Server {
 	registerCapabilities(srv)
 	registerStatus(srv, d)
 	registerPrintMarkdown(srv, d)
-	registerPrintImage(srv)
+	registerPrintImage(srv, d)
 	return srv
 }
 
@@ -141,24 +142,37 @@ func registerPrintMarkdown(srv *mcpsdk.Server, d Deps) {
 	})
 }
 
-// ---- print_image (stub) ----
+// ---- print_image ----
 
 type printImageIn struct {
-	Base64Png string `json:"base64_png"`
+	Base64Image string `json:"base64_image" jsonschema:"base64-encoded PNG, JPEG, GIF, or BMP image; may be a bare base64 string or a full data: URI"`
 }
 
 type printImageOut struct {
-	Error string `json:"error"`
+	JobID  string `json:"job_id"`
+	Status string `json:"status"`
 }
 
-func registerPrintImage(srv *mcpsdk.Server) {
+func registerPrintImage(srv *mcpsdk.Server, d Deps) {
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{
-		Name:        "print_image",
-		Description: "Print a base64-encoded PNG. Not yet implemented; returns an error.",
-	}, func(_ context.Context, _ *mcpsdk.CallToolRequest, _ printImageIn) (*mcpsdk.CallToolResult, printImageOut, error) {
-		return &mcpsdk.CallToolResult{
-			IsError: true,
-			Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "image printing not yet implemented"}},
-		}, printImageOut{Error: "image printing not yet implemented"}, nil
+		Name: "print_image",
+		Description: "Print an image. Provide a base64-encoded PNG, JPEG, GIF, or BMP " +
+			"(bare base64 or a data: URI). The image is resized to the 384px print width " +
+			"and Floyd–Steinberg dithered to black and white. Returns job_id and status.",
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in printImageIn) (*mcpsdk.CallToolResult, printImageOut, error) {
+		content, err := render.NormalizeImageInput(in.Base64Image)
+		if err != nil {
+			return &mcpsdk.CallToolResult{
+				IsError: true,
+				Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: err.Error()}},
+			}, printImageOut{}, nil
+		}
+		waitCtx, cancel := context.WithTimeout(ctx, PrintWaitTimeout)
+		defer cancel()
+		j, err := d.Queue.SubmitAndWait(waitCtx, "mcp", content)
+		if err != nil {
+			return nil, printImageOut{}, fmt.Errorf("submit: %w", err)
+		}
+		return nil, printImageOut{JobID: j.ID, Status: string(j.Status)}, nil
 	})
 }

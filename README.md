@@ -13,7 +13,7 @@ Go server + MCP tools to drive a PD01 BLE thermal printer from Claude, scripts, 
 | 5 | Voice + Python Workspace sidecar | — |
 | 6 | Systemd + Cloudflare tunnel | ✓ |
 | 7 | Android Print Service APK | — |
-| 8 | Image printing (Floyd–Steinberg) | — |
+| 8 | Image printing (Floyd–Steinberg) | ✓ |
 
 ## Build
 
@@ -82,7 +82,7 @@ PWA install and the Android share-sheet target require HTTPS — they work once 
 | `get_printer_capabilities` | Paper size, line limits, supported markdown subset. Call this first. |
 | `get_printer_status` | Reachability, queue depth, last job state. |
 | `print_markdown` | Validate → render → enqueue → wait → return `{job_id, status}`. |
-| `print_image` | Stub (Phase 8). |
+| `print_image` | Print a base64 PNG/JPEG/GIF/BMP — resized to 384px + Floyd–Steinberg dithered. |
 
 `print_markdown` returns an `IsError` result with `{error: "validation_failed", violations: [...]}` if the markdown violates the constraints. The LLM should call `get_printer_capabilities`, correct the line, and retry.
 
