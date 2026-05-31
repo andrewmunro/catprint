@@ -304,7 +304,11 @@ func inlineRuns(node ast.Node, src []byte, baseW Weight, baseSize float64) []Run
 			if txt != "" {
 				runs = append(runs, Run{Text: txt, W: w, Size: baseSize})
 			}
-			if x.HardLineBreak() || x.SoftLineBreak() {
+			// Hard break (line ended with two spaces / explicit break) forces a
+			// new line; soft break is normal markdown flow → a space.
+			if x.HardLineBreak() {
+				runs = append(runs, Run{Text: "\n", W: w, Size: baseSize})
+			} else if x.SoftLineBreak() {
 				runs = append(runs, Run{Text: " ", W: w, Size: baseSize})
 			}
 		case *ast.Emphasis:

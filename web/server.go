@@ -225,6 +225,12 @@ func (d Deps) handlePrintShare(w http.ResponseWriter, r *http.Request) {
 	text := r.FormValue("text")
 	url := r.FormValue("url")
 
+	// Shared text is plain text, not markdown: its single newlines would
+	// otherwise collapse into spaces (markdown soft breaks). Turn each newline
+	// into a hard break so the printout keeps the original line structure.
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\n", "  \n")
+
 	body := strings.TrimSpace(text)
 	if url != "" {
 		if body != "" {
