@@ -76,6 +76,16 @@
   .badge.failed { background: #fee2e2; color: var(--fail); }
   .badge.expired { background: #fef3c7; color: var(--warn); }
   .reprint { background: var(--line); color: var(--ink); padding: 6px 10px; font-size: 0.75rem; }
+  .preview { margin-top: 24px; }
+  .preview h2 { font-size: 1rem; margin: 0 0 8px; }
+  .paper {
+    background: var(--paper); border: 1px solid var(--line); border-radius: 6px;
+    padding: 10px; display: flex; justify-content: center; align-items: center;
+    min-height: 80px; box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  }
+  /* 384px paper rendered at 2x device px; cap display width, crisp pixels */
+  .paper img { width: 100%; max-width: 384px; image-rendering: pixelated; display: block; }
+  .paper.stale { opacity: 0.45; transition: opacity .15s; }
 </style>
 </head>
 <body>
@@ -89,6 +99,14 @@
   <textarea id="content" placeholder="- [ ] Milk&#10;- [ ] Eggs&#10;- [x] Bread"></textarea>
 
   <button class="primary" id="printBtn">🖨 Print</button>
+
+  <div class="preview">
+    <h2>Preview</h2>
+    <div class="paper" id="paperWrap">
+      <img id="previewImg" alt="" hidden>
+      <p class="sub" id="previewHint">type something to preview</p>
+    </div>
+  </div>
 
   <div class="jobs">
     <h2>History</h2>
@@ -160,7 +178,7 @@ async function doPrint() {
     } else if (j.error) { toast('error: ' + j.error); }
     else {
       toast('job ' + j.status);
-      if (j.status === 'sent') { $('content').value = ''; $('title').value = ''; }
+      if (j.status === 'sent') { $('content').value = ''; $('title').value = ''; schedulePreview(); }
     }
   } catch (e) { toast('request failed'); }
   $('printBtn').disabled = false;
@@ -174,6 +192,46 @@ async function reprint(id) {
   } catch { toast('reprint failed'); }
   refreshJobs(); refreshStatus();
 }
+
+// --- live preview (debounced) ---
+let previewTimer = null, previewURL = null, previewSeq = 0;
+function schedulePreview() {
+  $('paperWrap').classList.add('stale');
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(renderPreview, 450);
+}
+async function renderPreview() {
+  const content = $('content').value, title = $('title').value;
+  const img = $('previewImg'), hint = $('previewHint');
+  if (!content.trim() && !title.trim()) {
+    img.hidden = true; hint.hidden = false; hint.textContent = 'type something to preview';
+    $('paperWrap').classList.remove('stale');
+    return;
+  }
+  const seq = ++previewSeq;
+  try {
+    const res = await fetch('/preview', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({content, title})
+    });
+    if (seq !== previewSeq) return; // a newer request superseded this one
+    if (res.status === 422) {
+      const j = await res.json();
+      const v = (j.violations && j.violations[0]) || {};
+      img.hidden = true; hint.hidden = false;
+      hint.textContent = v.line ? `line ${v.line}: ${v.issue}` : (v.issue || 'invalid');
+    } else if (res.ok) {
+      const blob = await res.blob();
+      if (previewURL) URL.revokeObjectURL(previewURL);
+      previewURL = URL.createObjectURL(blob);
+      img.src = previewURL; img.hidden = false; hint.hidden = true;
+    }
+  } catch { /* leave previous preview */ }
+  $('paperWrap').classList.remove('stale');
+}
+
+$('content').addEventListener('input', schedulePreview);
+$('title').addEventListener('input', schedulePreview);
 
 $('printBtn').onclick = doPrint;
 const shared = new URLSearchParams(location.search).get('shared');

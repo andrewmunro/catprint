@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"strings"
 
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
@@ -87,6 +88,10 @@ func drawBlock(img *image.Gray, n ast.Node, src []byte, y int) (int, error) {
 		return drawWrappedBlock(img, runs, 0, AlignLeft, y)
 	case *ast.List:
 		return drawList(img, b, src, y)
+	case *ast.FencedCodeBlock:
+		return drawMonoBlock(img, codeBlockText(b, src), y)
+	case *ast.CodeBlock:
+		return drawMonoBlock(img, codeBlockText(b, src), y)
 	case *ast.ThematicBreak:
 		return drawRule(img, y), nil
 	default:
@@ -156,6 +161,79 @@ func taskPrefix(item *ast.ListItem) (string, bool) {
 		return "[x] ", true
 	}
 	return "[ ] ", true
+}
+
+// MonoMaxSizePx / MonoMinSizePx bound the auto-scaled monospace size used for
+// code/ASCII-art blocks. We shrink to fit the widest line in the print width,
+// down to the minimum (below which it's unreadable, so we let it clip).
+const (
+	MonoMaxSizePx = 20
+	MonoMinSizePx = 7
+)
+
+// codeBlockText extracts the raw text of a (fenced) code block, preserving
+// every space and newline exactly.
+func codeBlockText(n ast.Node, src []byte) string {
+	var b []byte
+	lines := n.Lines()
+	for i := 0; i < lines.Len(); i++ {
+		seg := lines.At(i)
+		b = append(b, seg.Value(src)...)
+	}
+	return strings.TrimRight(string(b), "\n")
+}
+
+// drawMonoBlock renders verbatim text in a monospace face, no wrapping, no
+// length clamp. The face size is chosen so the widest line fits the print
+// width (bounded by MonoMin/MaxSizePx). Spaces are preserved, so columns line
+// up — which is what ASCII art needs.
+func drawMonoBlock(img *image.Gray, text string, y int) (int, error) {
+	if text == "" {
+		return 0, nil
+	}
+	lines := strings.Split(text, "\n")
+	widest := 0
+	for _, l := range lines {
+		if n := len([]rune(l)); n > widest {
+			widest = n
+		}
+	}
+	if widest == 0 {
+		widest = 1
+	}
+
+	// Find the largest size whose advance*widest fits PrintWidthPx.
+	size := float64(MonoMaxSizePx)
+	for ; size >= MonoMinSizePx; size-- {
+		face, err := Face(WeightMono, size)
+		if err != nil {
+			return 0, err
+		}
+		adv, _ := face.GlyphAdvance('M') // monospace: every glyph same advance
+		if adv.Ceil()*widest <= PrintWidthPx {
+			break
+		}
+	}
+	if size < MonoMinSizePx {
+		size = MonoMinSizePx
+	}
+
+	face, err := Face(WeightMono, size)
+	if err != nil {
+		return 0, err
+	}
+	m := face.Metrics()
+	lh := (m.Ascent + m.Descent).Ceil()
+	startY := y
+	for _, l := range lines {
+		baseline := y + m.Ascent.Ceil()
+		// Draw each line verbatim in mono — spaces included.
+		if err := drawLine(img, []Run{{Text: l, W: WeightMono, Size: size}}, 0, baseline, AlignLeft, PrintWidthPx); err != nil {
+			return y - startY, err
+		}
+		y += lh
+	}
+	return y - startY + LineGapPx, nil
 }
 
 // drawRule draws a full-width horizontal line and returns total y consumed.

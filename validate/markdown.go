@@ -57,12 +57,10 @@ func Validate(md string) Result {
 		trimmed := strings.TrimRight(raw, "\r")
 		stripped := strings.TrimSpace(trimmed)
 
-		// Track unsupported code blocks but also reject them.
+		// Code fences delimit verbatim monospace blocks (ASCII art, code).
+		// Content inside is exempt from the line-length and heading checks —
+		// it's rendered as-is in a monospace face, auto-scaled to fit width.
 		if strings.HasPrefix(stripped, fenceMarker) {
-			vs = append(vs, Violation{
-				Line: lineNum, Issue: "code blocks are not supported",
-				Content: trimmed,
-			})
 			inFence = !inFence
 			continue
 		}

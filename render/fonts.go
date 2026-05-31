@@ -20,6 +20,9 @@ var notoSansBoldTTF []byte
 //go:embed assets/NotoEmoji-Regular.ttf
 var notoEmojiTTF []byte
 
+//go:embed assets/NotoSansMono-Regular.ttf
+var notoSansMonoTTF []byte
+
 // Weight selects which TTF a face is cut from.
 type Weight int
 
@@ -27,6 +30,7 @@ const (
 	WeightRegular Weight = iota
 	WeightBold
 	WeightEmoji
+	WeightMono
 )
 
 type faceKey struct {
@@ -38,6 +42,7 @@ var (
 	parsedSansRegular *opentype.Font
 	parsedSansBold    *opentype.Font
 	parsedEmoji       *opentype.Font
+	parsedMono        *opentype.Font
 	parseOnce         sync.Once
 	parseErr          error
 
@@ -57,6 +62,10 @@ func parseFonts() error {
 		}
 		if parsedEmoji, parseErr = opentype.Parse(notoEmojiTTF); parseErr != nil {
 			parseErr = fmt.Errorf("parse NotoEmoji-Regular: %w", parseErr)
+			return
+		}
+		if parsedMono, parseErr = opentype.Parse(notoSansMonoTTF); parseErr != nil {
+			parseErr = fmt.Errorf("parse NotoSansMono-Regular: %w", parseErr)
 			return
 		}
 	})
@@ -83,6 +92,8 @@ func Face(w Weight, sizePx float64) (font.Face, error) {
 		src = parsedSansBold
 	case WeightEmoji:
 		src = parsedEmoji
+	case WeightMono:
+		src = parsedMono
 	default:
 		return nil, fmt.Errorf("unknown weight %d", w)
 	}

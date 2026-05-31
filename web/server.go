@@ -16,6 +16,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"image/png"
 	"io/fs"
 	"net/http"
 	"strings"
@@ -23,6 +24,7 @@ import (
 
 	"github.com/synestry/catprint/jobs"
 	"github.com/synestry/catprint/printer"
+	"github.com/synestry/catprint/render"
 	"github.com/synestry/catprint/validate"
 )
 
@@ -53,6 +55,7 @@ func Handler(d Deps) http.Handler {
 
 	mux.HandleFunc("POST /print/text", d.handlePrintText)
 	mux.HandleFunc("POST /print/share", d.handlePrintShare)
+	mux.HandleFunc("POST /preview", d.handlePreview)
 	mux.HandleFunc("GET /status", d.handleStatus)
 	mux.HandleFunc("GET /jobs", d.handleJobs)
 	mux.HandleFunc("POST /jobs/{id}/reprint", d.handleReprint)
@@ -98,6 +101,34 @@ func (d Deps) handlePrintText(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d.enqueueAndRespond(w, "web", md)
+}
+
+// handlePreview renders the markdown to a PNG exactly as it would print
+// (timestamp header + tearline footer included) without enqueuing anything.
+// Returns image/png, or 422 + violations JSON if the markdown is invalid.
+func (d Deps) handlePreview(w http.ResponseWriter, r *http.Request) {
+	var req printTextReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	md := composeMarkdown(req.Title, req.Content)
+	if strings.TrimSpace(md) == "" {
+		writeErr(w, http.StatusBadRequest, "empty content")
+		return
+	}
+	if res := validate.Validate(md); !res.OK() {
+		writeJSON(w, http.StatusUnprocessableEntity, printResp{Error: res.Error, Violations: res.Violations})
+		return
+	}
+	img, err := render.RenderMarkdown(md, render.DefaultChrome("web"))
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = png.Encode(w, img)
 }
 
 // handlePrintShare accepts the Android Web Share Target POST (form-encoded).

@@ -25,10 +25,11 @@ var SupportedMarkdown = []string{
 	"--- full-width divider",
 	"plain paragraphs (auto word-wrapped at 32 chars)",
 	"emoji 🎉 (monochrome, rendered via Noto Emoji — encouraged for visual interest)",
+	"```fenced blocks``` (verbatim monospace, auto-scaled to fit width — use for ASCII art, tables you draw by hand, or code; spaces preserved, no wrapping or line-length limit inside)",
 }
 
 var UnsupportedMarkdown = []string{
-	"tables", "inline images", "colour", "links", "code blocks", "nested lists",
+	"markdown tables", "inline images", "colour", "links", "nested lists",
 }
 
 const AutoAddedNote = "timestamp header and tearline footer — do not add these yourself"
