@@ -23,7 +23,7 @@ import (
 )
 
 // defaultModel is used when the GEMINI_MODEL env var is unset.
-const defaultModel = "gemini-2.0-flash"
+const defaultModel = "gemini-2.5-flash"
 
 // modelName returns the Gemini model, overridable via GEMINI_MODEL so you can
 // switch (e.g. gemini-2.0-flash-lite, gemini-1.5-flash) without a rebuild.
