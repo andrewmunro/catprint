@@ -5,11 +5,15 @@ const SHELL = ['/', '/index.html', '/manifest.json'];
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();
-  e.waitUntil(caches.open('catprint-shell-v1').then(c => c.addAll(SHELL).catch(() => {})));
+  e.waitUntil(caches.open('catprint-shell-v2').then(c => c.addAll(SHELL).catch(() => {})));
 });
 
 self.addEventListener('activate', (e) => {
-  e.waitUntil(self.clients.claim());
+  e.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter(k => k !== 'catprint-shell-v2').map(k => caches.delete(k)));
+    await self.clients.claim();
+  })());
 });
 
 self.addEventListener('fetch', (e) => {
