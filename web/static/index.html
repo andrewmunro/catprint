@@ -108,6 +108,14 @@
     cursor: pointer; margin: 0;
   }
   #imageName { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  body.dragging::after {
+    content: "drop image to print";
+    position: fixed; inset: 12px; z-index: 20;
+    border: 3px dashed var(--accent); border-radius: 16px;
+    background: rgba(244,241,234,.85); color: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.1rem; font-weight: 700; pointer-events: none;
+  }
 </style>
 </head>
 <body>
@@ -121,8 +129,8 @@
   <textarea id="content" placeholder="- [ ] Milk&#10;- [ ] Eggs&#10;- [x] Bread"></textarea>
 
   <div class="imgrow">
-    <label class="filebtn">📷 Image…<input type="file" id="imageInput" accept="image/png,image/jpeg,image/gif,image/bmp" hidden></label>
-    <span id="imageName" class="sub"></span>
+    <label class="filebtn">📷 Image…<input type="file" id="imageInput" accept="image/png,image/jpeg,image/gif,image/bmp,image/webp" hidden></label>
+    <span id="imageName" class="sub">or drag / paste an image</span>
     <button id="clearImage" class="reprint" hidden>clear</button>
   </div>
 
@@ -245,15 +253,14 @@ let selectedImage = null;
 function clearImage() {
   selectedImage = null;
   $('imageInput').value = '';
-  $('imageName').textContent = '';
+  $('imageName').textContent = 'or drag / paste an image';
   $('clearImage').hidden = true;
   schedulePreview(); // fall back to text preview
 }
-$('imageInput').addEventListener('change', async (e) => {
-  const f = e.target.files[0];
-  if (!f) return;
+async function selectImageFile(f) {
+  if (!f || !f.type.startsWith('image/')) { toast('not an image'); return; }
   selectedImage = f;
-  $('imageName').textContent = f.name;
+  $('imageName').textContent = f.name || 'pasted image';
   $('clearImage').hidden = false;
   // Render dithered preview.
   $('paperWrap').classList.add('stale');
@@ -274,8 +281,38 @@ $('imageInput').addEventListener('change', async (e) => {
     }
   } catch { toast('preview failed'); }
   $('paperWrap').classList.remove('stale');
-});
+}
+$('imageInput').addEventListener('change', (e) => selectImageFile(e.target.files[0]));
 $('clearImage').onclick = clearImage;
+
+// --- drag & drop / paste image ---
+function firstImage(items) {
+  for (const it of items) {
+    if (it.kind === 'file' && it.type.startsWith('image/')) return it.getAsFile();
+  }
+  return null;
+}
+['dragenter', 'dragover'].forEach(ev =>
+  document.addEventListener(ev, (e) => {
+    if (e.dataTransfer && [...e.dataTransfer.items].some(i => i.kind === 'file')) {
+      e.preventDefault(); document.body.classList.add('dragging');
+    }
+  }));
+['dragleave', 'dragend', 'drop'].forEach(ev =>
+  document.addEventListener(ev, (e) => {
+    if (ev === 'dragleave' && e.relatedTarget) return; // ignore inner leaves
+    document.body.classList.remove('dragging');
+  }));
+document.addEventListener('drop', (e) => {
+  if (!e.dataTransfer) return;
+  const f = firstImage(e.dataTransfer.items) ||
+            [...e.dataTransfer.files].find(x => x.type.startsWith('image/'));
+  if (f) { e.preventDefault(); selectImageFile(f); }
+});
+document.addEventListener('paste', (e) => {
+  const f = e.clipboardData && firstImage(e.clipboardData.items);
+  if (f) { e.preventDefault(); selectImageFile(f); }
+});
 
 async function reprint(id) {
   try {
