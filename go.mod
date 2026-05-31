@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/google/uuid v1.6.0
 	github.com/modelcontextprotocol/go-sdk v1.6.1
+	github.com/sirupsen/logrus v1.9.3
 	github.com/yuin/goldmark v1.2.1
 	golang.org/x/image v0.41.0
 	modernc.org/sqlite v1.51.0
@@ -24,7 +25,6 @@ require (
 	github.com/saltosystems/winrt-go v0.0.0-20230921082907-2ab5b7d431e1 // indirect
 	github.com/segmentio/asm v1.1.3 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect
-	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/tinygo-org/cbgo v0.0.4 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect

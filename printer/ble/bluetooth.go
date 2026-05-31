@@ -8,8 +8,17 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"tinygo.org/x/bluetooth"
 )
+
+// muka/go-bluetooth (pulled in by tinygo's Linux/BlueZ backend) logs noisy
+// "MapToStruct: invalid field" warnings on the global logrus logger whenever
+// BlueZ exposes a property its structs don't map. They are harmless; raise the
+// threshold so only real errors surface.
+func init() {
+	logrus.SetLevel(logrus.ErrorLevel)
+}
 
 const (
 	ImageMTU          = 123
