@@ -102,18 +102,19 @@ curl -s -X POST -H 'Content-Type: application/json' -H 'Accept: application/json
   http://localhost:9000/mcp
 ```
 
-## Scripts (still useful)
+## Diagnostic scripts
 
-| Binary | Use |
+Standalone tools under `scripts/` — build with `go build ./scripts/<name>`. They talk to the printer directly and do not need the server running.
+
+| Script | Use |
 | --- | --- |
-| `scan.exe` | List BLE devices (find the printer's MAC). |
-| `test_print.exe [MAC]` | Print a 384×60 black rectangle (driver smoke test). |
-| `print_markdown.exe [-addr MAC] [file.md]` | Render + print markdown directly (bypasses queue + MCP). |
-| `keepalive.exe [-addr MAC]` | Standalone keep-alive (only useful if the server isn't running). |
+| `scan` | List BLE devices (find the printer's MAC). One-time setup. |
+| `test_print` | Print a 384×60 black rectangle (driver/protocol smoke test). |
+| `test_render` | Render the example docs to PNG (no printer) to eyeball fonts and layout. |
 
 ## Examples
 
-`examples/` contains small markdown files you can pipe through `print_markdown.exe` or feed to the MCP tool.
+`examples/` contains small markdown files you can feed to the web UI textarea or the `print_markdown` MCP tool.
 
 ## Repository layout
 
