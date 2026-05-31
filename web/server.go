@@ -317,7 +317,7 @@ func (d Deps) handleJobPreview(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "no such job")
 		return
 	}
-	img, err := render.RenderMarkdown(j.Content, render.Chrome{Now: j.CreatedAt, Source: j.Source})
+	img, err := render.RenderContent(j.Content, render.Chrome{Now: j.CreatedAt, Source: j.Source})
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
