@@ -12,11 +12,14 @@
   "share_target": {
     "action": "/print/share",
     "method": "POST",
-    "enctype": "application/x-www-form-urlencoded",
+    "enctype": "multipart/form-data",
     "params": {
       "title": "title",
       "text": "text",
-      "url": "url"
+      "url": "url",
+      "files": [
+        { "name": "image", "accept": ["image/png", "image/jpeg", "image/gif", "image/bmp", "image/webp"] }
+      ]
     }
   }
 }

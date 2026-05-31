@@ -191,13 +191,36 @@ func (d Deps) handlePreview(w http.ResponseWriter, r *http.Request) {
 	_ = png.Encode(w, img)
 }
 
-// handlePrintShare accepts the Android Web Share Target POST (form-encoded).
-// Fields: title, text, url — we combine text + url into the body.
+// handlePrintShare accepts the Web Share Target POST. Multipart (Level 2) may
+// carry a shared image file in "image"; otherwise it's title/text/url which we
+// combine into markdown. Either way it's a navigation, so we redirect back to
+// the UI with a status flag.
 func (d Deps) handlePrintShare(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad form")
+	if err := r.ParseMultipartForm(16 << 20); err != nil {
+		// Not multipart (older share or text-only) — fall back to urlencoded.
+		if err := r.ParseForm(); err != nil {
+			writeErr(w, http.StatusBadRequest, "bad form")
+			return
+		}
+	}
+
+	// Shared image takes priority over any accompanying text.
+	if f, _, err := r.FormFile("image"); err == nil {
+		defer f.Close()
+		raw, _ := io.ReadAll(io.LimitReader(f, 16<<20))
+		content, err := render.NormalizeImageInput(base64.StdEncoding.EncodeToString(raw))
+		if err != nil {
+			http.Redirect(w, r, "/?shared=invalid", http.StatusSeeOther)
+			return
+		}
+		if _, err := d.Queue.Submit("web", content); err != nil {
+			writeErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		http.Redirect(w, r, "/?shared=1", http.StatusSeeOther)
 		return
 	}
+
 	title := r.FormValue("title")
 	text := r.FormValue("text")
 	url := r.FormValue("url")
@@ -214,8 +237,6 @@ func (d Deps) handlePrintShare(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "nothing shared")
 		return
 	}
-	// Share target is a navigation; validate then enqueue, redirect back to
-	// the UI with a flag so the page can surface the outcome.
 	if res := validate.Validate(md); !res.OK() {
 		http.Redirect(w, r, "/?shared=invalid", http.StatusSeeOther)
 		return
