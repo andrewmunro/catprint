@@ -8,6 +8,7 @@ import (
 	"image"
 	"image/color"
 	"strings"
+	"sync"
 
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
@@ -22,9 +23,17 @@ const PrintWidthPx = 384
 // Scratch canvas height. 8000px ≈ 1m of paper — well over any sane print.
 const maxCanvasHeight = 8000
 
+// renderMu serializes all text rendering. The cached opentype faces carry
+// internal glyph buffers that are not safe for concurrent use, and the queue
+// worker, live preview, and history thumbnails can all render at once.
+var renderMu sync.Mutex
+
 // RenderMarkdown returns a 384px-wide grayscale bitmap of the rendered markdown
 // with timestamp header and tearline footer auto-injected.
 func RenderMarkdown(md string, c Chrome) (*image.Gray, error) {
+	renderMu.Lock()
+	defer renderMu.Unlock()
+
 	canvas := image.NewGray(image.Rect(0, 0, PrintWidthPx, maxCanvasHeight))
 	fillWhite(canvas)
 
