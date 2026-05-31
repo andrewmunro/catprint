@@ -35,6 +35,17 @@ func Validate(md string) Result {
 	var vs []Violation
 	lines := strings.Split(md, "\n")
 
+	// Reject runaway jobs before rendering — a single print shouldn't eat the
+	// roll. Count non-blank content lines so trailing newlines don't trip it.
+	if n := countContentLines(lines); n > printer.MaxContentLines {
+		vs = append(vs, Violation{
+			Line:    0,
+			Issue:   "exceeds max_content_lines",
+			Actual:  n,
+			Content: "too many lines for one print; split into multiple prints",
+		})
+	}
+
 	const (
 		fenceMarker = "```"
 		tablePipe   = "|"
@@ -103,6 +114,17 @@ func Validate(md string) Result {
 		r.Error = "validation_failed"
 	}
 	return r
+}
+
+// countContentLines counts lines with any non-whitespace content.
+func countContentLines(lines []string) int {
+	n := 0
+	for _, l := range lines {
+		if strings.TrimSpace(l) != "" {
+			n++
+		}
+	}
+	return n
 }
 
 // splitHeading returns (level, body) for "# Title" lines or (0, "") otherwise.

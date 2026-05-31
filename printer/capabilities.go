@@ -8,6 +8,11 @@ const (
 	MaxLineLengthChars = 32
 	HeadingMaxChars    = 20
 	BytesPerLine       = 48 // 384 / 8
+
+	// MaxContentLines caps how many lines a single print may contain, to
+	// avoid runaway jobs eating a whole roll. Generous — long lists and
+	// itineraries fit easily — but a 500-line dump is rejected.
+	MaxContentLines = 60
 )
 
 var SupportedMarkdown = []string{
@@ -31,7 +36,8 @@ const AutoAddedNote = "timestamp header and tearline footer — do not add these
 const CapabilitiesNotes = "All lines hard-clamped to 32 chars. Headings hard-clamped to 20 chars. " +
 	"Emoji are supported and encouraged — they render as crisp monochrome glyphs and make " +
 	"notes, lists, and headings more scannable. Each emoji counts as one character toward the " +
-	"32-char line limit. Server returns line-specific errors on violations so you can correct and retry."
+	"32-char line limit. A single print is capped at max_content_lines non-blank lines to save paper — " +
+	"split very long content across multiple prints. Server returns line-specific errors on violations so you can correct and retry."
 
 // Capabilities is the wire-format struct returned by the MCP tool.
 type Capabilities struct {
@@ -39,6 +45,7 @@ type Capabilities struct {
 	PrintWidthPx       int      `json:"print_width_px"`
 	MaxLineLengthChars int      `json:"max_line_length_chars"`
 	HeadingMaxChars    int      `json:"heading_max_chars"`
+	MaxContentLines    int      `json:"max_content_lines"`
 	SupportedMarkdown  []string `json:"supported_markdown"`
 	Unsupported        []string `json:"unsupported"`
 	AutoAddedByServer  string   `json:"auto_added_by_server"`
@@ -51,6 +58,7 @@ func CurrentCapabilities() Capabilities {
 		PrintWidthPx:       PrintWidthPx,
 		MaxLineLengthChars: MaxLineLengthChars,
 		HeadingMaxChars:    HeadingMaxChars,
+		MaxContentLines:    MaxContentLines,
 		SupportedMarkdown:  SupportedMarkdown,
 		Unsupported:        UnsupportedMarkdown,
 		AutoAddedByServer:  AutoAddedNote,
