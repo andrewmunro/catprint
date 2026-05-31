@@ -24,8 +24,7 @@ import (
 
 func main() {
 	addr := flag.String("addr", getenv("PRINTER_ADDRESS", ""), "BLE MAC; if blank, discovered + cached")
-	mcpPort := flag.String("mcp-port", getenv("MCP_PORT", "9000"), "MCP HTTP listen port")
-	webPort := flag.String("web-port", getenv("WEB_PORT", "8080"), "web UI listen port")
+	port := flag.String("port", getenv("PORT", "38827"), "HTTP listen port (serves web at / and MCP at /mcp)")
 	dbPath := flag.String("db", getenv("DB_PATH", "jobs.db"), "SQLite path")
 	addrCache := flag.String("addr-cache", ".printer_addr", "MAC cache file")
 	keepalive := flag.Duration("keepalive", 20*time.Second, "BLE ping interval (0 disables, reconnect per job)")
@@ -55,40 +54,31 @@ func main() {
 		q.Stop()
 	}()
 
-	srv := mcp.New(mcp.Deps{Queue: q, Store: store})
-	handler := mcpsdk.NewStreamableHTTPHandler(func(_ *http.Request) *mcpsdk.Server {
-		return srv
+	mcpServer := mcp.New(mcp.Deps{Queue: q, Store: store})
+	mcpHandler := mcpsdk.NewStreamableHTTPHandler(func(_ *http.Request) *mcpsdk.Server {
+		return mcpServer
 	}, nil)
 
+	// One mux, one port. The web UI owns "/" and its API paths; MCP owns
+	// "/mcp". No path overlap, so a single Cloudflare hostname serves both.
 	mux := http.NewServeMux()
-	mux.Handle("/mcp", handler)
-	mux.Handle("/mcp/", handler)
+	mux.Handle("/mcp", mcpHandler)
+	mux.Handle("/mcp/", mcpHandler)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
+	mux.Handle("/", web.Handler(web.Deps{Queue: q, Store: store}))
 
-	mcpSrv := &http.Server{
-		Addr:              ":" + *mcpPort,
+	httpSrv := &http.Server{
+		Addr:              ":" + *port,
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	go func() {
-		log.Printf("MCP server listening on :%s/mcp", *mcpPort)
-		if err := mcpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("mcp http: %v", err)
-		}
-	}()
-
-	webSrv := &http.Server{
-		Addr:              ":" + *webPort,
-		Handler:           web.Handler(web.Deps{Queue: q, Store: store}),
-		ReadHeaderTimeout: 5 * time.Second,
-	}
-	go func() {
-		log.Printf("web UI listening on :%s", *webPort)
-		if err := webSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("web http: %v", err)
+		log.Printf("catprint listening on :%s  (web=/  mcp=/mcp)", *port)
+		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("http: %v", err)
 		}
 	}()
 
@@ -99,8 +89,7 @@ func main() {
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
-	_ = mcpSrv.Shutdown(shutdownCtx)
-	_ = webSrv.Shutdown(shutdownCtx)
+	_ = httpSrv.Shutdown(shutdownCtx)
 }
 
 func renderForQueue(content string) (*image.Gray, error) {

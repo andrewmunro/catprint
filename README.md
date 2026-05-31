@@ -28,7 +28,7 @@ Pure Go (modernc.org/sqlite). No CGO, no mingw needed.
 ## Run
 
 ```bash
-./bin/catprint -addr D1:01:04:14:52:B4 -mcp-port 9000
+./bin/catprint -addr D1:01:04:14:52:B4
 # or rely on .printer_addr / scan:
 ./bin/catprint
 ```
@@ -38,8 +38,7 @@ Flags / env:
 | Flag | Env | Default |
 | --- | --- | --- |
 | `-addr` | `PRINTER_ADDRESS` | scan + cache to `.printer_addr` |
-| `-mcp-port` | `MCP_PORT` | `9000` |
-| `-web-port` | `WEB_PORT` | `8080` |
+| `-port` | `PORT` | `38827` (web at `/`, MCP at `/mcp`) |
 | `-db` | `DB_PATH` | `jobs.db` |
 | `-keepalive` | — | `20s` (0 = reconnect per job) |
 
@@ -56,7 +55,7 @@ The keepalive ticker holds the BLE connection open and sends a `GetDevState` pin
 This host runs the server under systemd; a separate `cloudflared` service (token-managed via the Cloudflare Zero Trust dashboard) provides the public HTTPS endpoint.
 
 ```bash
-cp .env.example .env      # edit PRINTER_ADDRESS, ports, DB_PATH
+cp .env.example .env      # edit PRINTER_ADDRESS, PORT, DB_PATH
 make install              # builds, installs unit, enables + starts (needs sudo)
 make logs                 # tail
 make restart              # rebuild + restart after code changes
@@ -64,18 +63,19 @@ make restart              # rebuild + restart after code changes
 
 ### Cloudflare ingress
 
-The tunnel routing is configured in the Cloudflare Zero Trust dashboard (Networks → Tunnels → your tunnel → Public Hostnames), since this tunnel runs with a token rather than a local `config.yml`. Add public hostnames pointing at the local services:
+The tunnel routing is configured in the Cloudflare Zero Trust dashboard (Networks → Tunnels → your tunnel → Public Hostnames), since this tunnel runs with a token rather than a local `config.yml`. Web UI and MCP share one port, so a single public hostname covers everything:
 
 | Public hostname | Service |
 | --- | --- |
-| `print.example.com` | `http://localhost:8080` (web UI + PWA share target) |
-| `print-mcp.example.com` | `http://localhost:9000` (MCP, optional) |
+| `print.example.com` | `http://localhost:38827` |
+
+The web UI is then at `https://print.example.com/` and MCP at `https://print.example.com/mcp`.
 
 PWA install and the Android share-sheet target require HTTPS — they work once the tunnel hostname is live, not over plain-LAN `http`.
 
 ## MCP tools
 
-`POST http://<host>:9000/mcp` (streamable HTTP transport):
+`POST http://<host>:38827/mcp` (streamable HTTP transport):
 
 | Tool | Purpose |
 | --- | --- |
@@ -95,7 +95,7 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) o
   "mcpServers": {
     "catprint": {
       "type": "http",
-      "url": "http://localhost:9000/mcp"
+      "url": "http://localhost:38827/mcp"
     }
   }
 }
@@ -121,14 +121,14 @@ Restart Claude Desktop. Open the tools menu; you should see four `catprint` tool
 ```bash
 SESSION=$(curl -s -D - -X POST -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"curl","version":"0"}}}' \
-  http://localhost:9000/mcp | grep -i mcp-session-id | awk '{print $2}' | tr -d '\r')
+  http://localhost:38827/mcp | grep -i mcp-session-id | awk '{print $2}' | tr -d '\r')
 
 curl -s -X POST -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -H "Mcp-Session-Id: $SESSION" \
-  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' http://localhost:9000/mcp
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' http://localhost:38827/mcp
 
 curl -s -X POST -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -H "Mcp-Session-Id: $SESSION" \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"print_markdown","arguments":{"content":"# Hi\n- [ ] one\n- [x] two"}}}' \
-  http://localhost:9000/mcp
+  http://localhost:38827/mcp
 ```
 
 ## Diagnostic scripts
