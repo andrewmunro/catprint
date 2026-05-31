@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111111">
+<link rel="manifest" href="/manifest.json">
+<title>catprint</title>
+<style>
+  :root {
+    --bg: #f4f1ea;
+    --paper: #ffffff;
+    --ink: #1a1a1a;
+    --muted: #6b6b6b;
+    --line: #d9d4c8;
+    --accent: #c2410c;
+    --ok: #15803d;
+    --warn: #b45309;
+    --fail: #b91c1c;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    padding: env(safe-area-inset-top) 16px 48px;
+    max-width: 560px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 1.4rem;
+    letter-spacing: -0.02em;
+    margin: 20px 0 4px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+  .dot.on { background: var(--ok); }
+  .sub { color: var(--muted); font-size: 0.8rem; margin: 0 0 16px; }
+  label { display: block; font-size: 0.8rem; color: var(--muted); margin: 12px 0 4px; }
+  input[type=text], textarea {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--line);
+    border-radius: 10px; background: var(--paper); color: var(--ink);
+    font: inherit; resize: vertical;
+  }
+  textarea { min-height: 160px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.9rem; }
+  button {
+    appearance: none; border: 0; border-radius: 10px; padding: 12px 16px;
+    font: inherit; font-weight: 600; cursor: pointer;
+  }
+  .primary { background: var(--ink); color: #fff; width: 100%; margin-top: 14px; }
+  .primary:active { transform: translateY(1px); }
+  .primary:disabled { opacity: 0.5; }
+  .toast {
+    position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
+    background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 999px;
+    font-size: 0.85rem; opacity: 0; transition: opacity .2s; pointer-events: none;
+    max-width: 90vw;
+  }
+  .toast.show { opacity: 1; }
+  .jobs { margin-top: 28px; }
+  .jobs h2 { font-size: 1rem; margin: 0 0 8px; }
+  .job {
+    background: var(--paper); border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 8px; display: flex; align-items: center; gap: 10px;
+  }
+  .job .meta { flex: 1; min-width: 0; }
+  .job .line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .job .when { color: var(--muted); font-size: 0.72rem; }
+  .badge {
+    font-size: 0.68rem; font-weight: 700; padding: 2px 8px; border-radius: 999px;
+    text-transform: uppercase; letter-spacing: 0.03em; white-space: nowrap;
+  }
+  .badge.sent { background: #dcfce7; color: var(--ok); }
+  .badge.queued { background: #e5e7eb; color: #374151; }
+  .badge.failed { background: #fee2e2; color: var(--fail); }
+  .badge.expired { background: #fef3c7; color: var(--warn); }
+  .reprint { background: var(--line); color: var(--ink); padding: 6px 10px; font-size: 0.75rem; }
+</style>
+</head>
+<body>
+  <h1><span id="dot" class="dot"></span> catprint</h1>
+  <p class="sub" id="statusLine">checking printer…</p>
+
+  <label for="title">Title (optional)</label>
+  <input type="text" id="title" placeholder="Shopping" autocomplete="off">
+
+  <label for="content">Markdown</label>
+  <textarea id="content" placeholder="- [ ] Milk&#10;- [ ] Eggs&#10;- [x] Bread"></textarea>
+
+  <button class="primary" id="printBtn">🖨 Print</button>
+
+  <div class="jobs">
+    <h2>History</h2>
+    <div id="jobList"></div>
+    <p class="sub">sent = BLE transmitted, not paper confirmed</p>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const toast = (msg) => {
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2600);
+};
+
+async function refreshStatus() {
+  try {
+    const s = await (await fetch('/status')).json();
+    $('dot').classList.toggle('on', s.reachable);
+    $('statusLine').textContent = s.reachable
+      ? `printer ready · queue ${s.queue_depth} · retry ${s.jobs_pending_retry}`
+      : 'printer unreachable — jobs will queue';
+  } catch { $('statusLine').textContent = 'server unreachable'; }
+}
+
+function badge(status) {
+  return `<span class="badge ${status}">${status}</span>`;
+}
+
+async function refreshJobs() {
+  try {
+    const jobs = await (await fetch('/jobs')).json();
+    $('jobList').innerHTML = jobs.map(j => {
+      const when = new Date(j.created_at).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+      const canReprint = j.status === 'failed' || j.status === 'sent' || j.status === 'expired';
+      return `<div class="job">
+        <div class="meta">
+          <div class="line">${escapeHtml(j.first_line)}</div>
+          <div class="when">${when} · ${j.source}</div>
+        </div>
+        ${badge(j.status)}
+        ${canReprint ? `<button class="reprint" data-id="${j.id}">reprint</button>` : ''}
+      </div>`;
+    }).join('') || '<p class="sub">no jobs yet</p>';
+    document.querySelectorAll('.reprint').forEach(b =>
+      b.onclick = () => reprint(b.dataset.id));
+  } catch {}
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function doPrint() {
+  const content = $('content').value;
+  const title = $('title').value;
+  if (!content.trim() && !title.trim()) { toast('nothing to print'); return; }
+  $('printBtn').disabled = true;
+  try {
+    const res = await fetch('/print/text', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({content, title})
+    });
+    const j = await res.json();
+    if (j.error) { toast('error: ' + j.error); }
+    else {
+      toast('job ' + j.status);
+      if (j.status === 'sent') { $('content').value = ''; $('title').value = ''; }
+    }
+  } catch (e) { toast('request failed'); }
+  $('printBtn').disabled = false;
+  refreshJobs(); refreshStatus();
+}
+
+async function reprint(id) {
+  try {
+    const j = await (await fetch(`/jobs/${id}/reprint`, {method:'POST'})).json();
+    toast(j.error ? ('error: ' + j.error) : 'requeued');
+  } catch { toast('reprint failed'); }
+  refreshJobs(); refreshStatus();
+}
+
+$('printBtn').onclick = doPrint;
+if (new URLSearchParams(location.search).get('shared')) toast('shared to printer');
+
+refreshStatus(); refreshJobs();
+setInterval(() => { refreshStatus(); refreshJobs(); }, 5000);
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
+</script>
+</body>
+</html>
