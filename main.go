@@ -57,7 +57,14 @@ func main() {
 	mcpServer := mcp.New(mcp.Deps{Queue: q, Store: store})
 	mcpHandler := mcpsdk.NewStreamableHTTPHandler(func(_ *http.Request) *mcpsdk.Server {
 		return mcpServer
-	}, nil)
+	}, &mcpsdk.StreamableHTTPOptions{
+		// cloudflared connects over loopback, so the SDK's DNS-rebinding guard
+		// (loopback local addr + non-loopback Host) rejects tunnel requests
+		// whose Host is the public hostname. We sit behind the tunnel, so turn
+		// it off. NOTE: the endpoint is then reachable with no auth — add a
+		// token/Access policy before relying on this being private.
+		DisableLocalhostProtection: true,
+	})
 
 	// One mux, one port. The web UI owns "/" and its API paths; MCP owns
 	// "/mcp". No path overlap, so a single Cloudflare hostname serves both.
