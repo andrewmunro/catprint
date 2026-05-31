@@ -9,9 +9,9 @@ Go server + MCP tools to drive a PD01 BLE thermal printer from Claude, scripts, 
 | 1 | PD01 BLE driver, SQLite job queue | ✓ |
 | 2 | Markdown renderer + validator | ✓ |
 | 3 | MCP server (4 tools, HTTP transport) | ✓ |
-| 4 | Web UI + Android PWA | — |
+| 4 | Web UI + Android PWA | ✓ |
 | 5 | Voice + Python Workspace sidecar | — |
-| 6 | Systemd + Cloudflare tunnel | — |
+| 6 | Systemd + Cloudflare tunnel | ✓ |
 | 7 | Android Print Service APK | — |
 | 8 | Image printing (Floyd–Steinberg) | — |
 
@@ -39,10 +39,39 @@ Flags / env:
 | --- | --- | --- |
 | `-addr` | `PRINTER_ADDRESS` | scan + cache to `.printer_addr` |
 | `-mcp-port` | `MCP_PORT` | `9000` |
+| `-web-port` | `WEB_PORT` | `8080` |
 | `-db` | `DB_PATH` | `jobs.db` |
 | `-keepalive` | — | `20s` (0 = reconnect per job) |
 
 The keepalive ticker holds the BLE connection open and sends a `GetDevState` ping at that interval to defeat the printer's idle sleep.
+
+### Linux / BlueZ notes
+
+- Requires the `bluez` package and a running `bluetooth` service (`sudo apt-get install -y bluez && sudo systemctl enable --now bluetooth`).
+- `PRINTER_ADDRESS` is **required** — auto-discovery by name does not work on BlueZ (the printer's name appears only in active-scan responses). Find the MAC with `go run ./scripts/scan` while the printer is awake and nearby.
+- BlueZ can't connect to a MAC it hasn't seen advertise since boot. The queue handles this: on a failed connect it runs a short scan to warm the cache, then retries.
+
+## Deploy (systemd + Cloudflare tunnel)
+
+This host runs the server under systemd; a separate `cloudflared` service (token-managed via the Cloudflare Zero Trust dashboard) provides the public HTTPS endpoint.
+
+```bash
+cp .env.example .env      # edit PRINTER_ADDRESS, ports, DB_PATH
+make install              # builds, installs unit, enables + starts (needs sudo)
+make logs                 # tail
+make restart              # rebuild + restart after code changes
+```
+
+### Cloudflare ingress
+
+The tunnel routing is configured in the Cloudflare Zero Trust dashboard (Networks → Tunnels → your tunnel → Public Hostnames), since this tunnel runs with a token rather than a local `config.yml`. Add public hostnames pointing at the local services:
+
+| Public hostname | Service |
+| --- | --- |
+| `print.example.com` | `http://localhost:8080` (web UI + PWA share target) |
+| `print-mcp.example.com` | `http://localhost:9000` (MCP, optional) |
+
+PWA install and the Android share-sheet target require HTTPS — they work once the tunnel hostname is live, not over plain-LAN `http`.
 
 ## MCP tools
 

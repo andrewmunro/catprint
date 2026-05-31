@@ -1,0 +1,16 @@
+[Unit]
+Description=catprint thermal printer hub
+After=network.target bluetooth.target dbus.service
+Wants=bluetooth.target
+
+[Service]
+Type=simple
+User=andrew
+WorkingDirectory=/home/andrew/projects/catprint
+EnvironmentFile=/home/andrew/projects/catprint/.env
+ExecStart=/home/andrew/projects/catprint/bin/catprint
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

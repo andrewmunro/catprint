@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/synestry/catprint/jobs"
+	"github.com/synestry/catprint/printer/ble"
 )
 
 // Renderer turns markdown into a 384-px-wide grayscale bitmap.
@@ -365,7 +366,28 @@ func (q *Queue) ensureConnected(ctx context.Context) (*Printer, error) {
 	}
 	cctx, cancel := context.WithTimeout(ctx, q.cfg.ConnectTimeout)
 	defer cancel()
-	return q.cfg.Connect(cctx, addr)
+	p, err := q.cfg.Connect(cctx, addr)
+	if err == nil {
+		return p, nil
+	}
+	// BlueZ (Linux) can't connect to a MAC it hasn't seen advertise — the
+	// device object isn't in its cache after a cold start. A short scan
+	// populates the cache; then the connect succeeds. Harmless on Windows.
+	log.Printf("queue: connect failed (%v); warming cache with a scan", err)
+	warmCache(ctx, q.cfg.ConnectTimeout)
+	cctx2, cancel2 := context.WithTimeout(ctx, q.cfg.ConnectTimeout)
+	defer cancel2()
+	return q.cfg.Connect(cctx2, addr)
+}
+
+// warmCache runs a brief discovery scan purely so the OS bluetooth stack
+// learns about nearby devices before we connect by MAC. Result is ignored.
+func warmCache(ctx context.Context, timeout time.Duration) {
+	d := 8 * time.Second
+	if timeout > 0 && timeout < d {
+		d = timeout
+	}
+	_, _ = ble.Scan(d)
 }
 
 func readAddrCache(path string) string {
