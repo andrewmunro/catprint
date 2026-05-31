@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -21,8 +22,17 @@ import (
 	"github.com/synestry/catprint/validate"
 )
 
-// Model is the Gemini model used for composing prints.
-const Model = "gemini-2.0-flash"
+// defaultModel is used when the GEMINI_MODEL env var is unset.
+const defaultModel = "gemini-2.0-flash"
+
+// modelName returns the Gemini model, overridable via GEMINI_MODEL so you can
+// switch (e.g. gemini-2.0-flash-lite, gemini-1.5-flash) without a rebuild.
+func modelName() string {
+	if m := os.Getenv("GEMINI_MODEL"); m != "" {
+		return m
+	}
+	return defaultModel
+}
 
 // Deps is what the handler needs from the rest of the app.
 type Deps struct {
@@ -123,7 +133,7 @@ func (d Deps) compose(ctx context.Context, query string) (string, error) {
 
 	prompt := query
 	for attempt := 0; attempt < 2; attempt++ {
-		resp, err := client.Models.GenerateContent(ctx, Model, genai.Text(prompt), cfg)
+		resp, err := client.Models.GenerateContent(ctx, modelName(), genai.Text(prompt), cfg)
 		if err != nil {
 			return "", fmt.Errorf("generate: %w", err)
 		}
