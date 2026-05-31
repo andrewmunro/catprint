@@ -76,6 +76,20 @@
   .badge.failed { background: #fee2e2; color: var(--fail); }
   .badge.expired { background: #fef3c7; color: var(--warn); }
   .reprint { background: var(--line); color: var(--ink); padding: 6px 10px; font-size: 0.75rem; }
+  .thumb {
+    width: 44px; height: 44px; object-fit: cover; object-position: top;
+    border: 1px solid var(--line); border-radius: 6px; background: #fff;
+    image-rendering: pixelated; cursor: zoom-in; flex: none;
+  }
+  .lightbox {
+    position: fixed; inset: 0; background: rgba(0,0,0,.7); display: none;
+    align-items: center; justify-content: center; padding: 24px; z-index: 10;
+  }
+  .lightbox.show { display: flex; }
+  .lightbox img {
+    max-width: 384px; width: 100%; background: #fff; padding: 8px; border-radius: 8px;
+    image-rendering: pixelated;
+  }
   .preview { margin-top: 24px; }
   .preview h2 { font-size: 1rem; margin: 0 0 8px; }
   .paper {
@@ -115,6 +129,7 @@
   </div>
 
   <div class="toast" id="toast"></div>
+  <div class="lightbox" id="lightbox"><img id="lightboxImg" alt=""></div>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -144,6 +159,7 @@ async function refreshJobs() {
       const when = new Date(j.created_at).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
       const canReprint = j.status === 'failed' || j.status === 'sent' || j.status === 'expired';
       return `<div class="job">
+        <img class="thumb" src="/jobs/${j.id}/preview" alt="" loading="lazy" data-id="${j.id}">
         <div class="meta">
           <div class="line">${escapeHtml(j.first_line)}</div>
           <div class="when">${when} · ${j.source}</div>
@@ -154,12 +170,20 @@ async function refreshJobs() {
     }).join('') || '<p class="sub">no jobs yet</p>';
     document.querySelectorAll('.reprint').forEach(b =>
       b.onclick = () => reprint(b.dataset.id));
+    document.querySelectorAll('.thumb').forEach(t =>
+      t.onclick = () => openLightbox(t.src));
   } catch {}
 }
 
 function escapeHtml(s) {
   return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+
+function openLightbox(src) {
+  $('lightboxImg').src = src;
+  $('lightbox').classList.add('show');
+}
+$('lightbox').onclick = () => $('lightbox').classList.remove('show');
 
 async function doPrint() {
   const content = $('content').value;

@@ -58,6 +58,7 @@ func Handler(d Deps) http.Handler {
 	mux.HandleFunc("POST /preview", d.handlePreview)
 	mux.HandleFunc("GET /status", d.handleStatus)
 	mux.HandleFunc("GET /jobs", d.handleJobs)
+	mux.HandleFunc("GET /jobs/{id}/preview", d.handleJobPreview)
 	mux.HandleFunc("POST /jobs/{id}/reprint", d.handleReprint)
 
 	return mux
@@ -226,6 +227,24 @@ func (d Deps) handleJobs(w http.ResponseWriter, _ *http.Request) {
 		})
 	}
 	writeJSON(w, http.StatusOK, views)
+}
+
+// handleJobPreview renders a stored job's content to a PNG — the same image
+// that printed (or would have). Used for history thumbnails.
+func (d Deps) handleJobPreview(w http.ResponseWriter, r *http.Request) {
+	j, err := d.Store.Get(r.PathValue("id"))
+	if err != nil {
+		writeErr(w, http.StatusNotFound, "no such job")
+		return
+	}
+	img, err := render.RenderMarkdown(j.Content, render.Chrome{Now: j.CreatedAt, Source: j.Source})
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "max-age=3600")
+	_ = png.Encode(w, img)
 }
 
 func (d Deps) handleReprint(w http.ResponseWriter, r *http.Request) {
