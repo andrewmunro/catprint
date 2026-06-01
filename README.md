@@ -8,7 +8,7 @@
 
 <img src="docs/demo.jpg" alt="catprint printout" width="480">
 
-https://github.com/user-attachments/assets/02ecca64-37a6-4081-9977-00868c9267a8
+https://github.com/user-attachments/assets/a7dfae13-e2a4-426c-92ed-633e1b8a1746
 
 </div>
 
@@ -52,31 +52,31 @@ GOOS=windows GOARCH=amd64 go build -o bin/catprint.exe .
 Content is a small markdown subset, validated against the paper's real limits before rendering:
 
 ````markdown
-# Title                  large bold, centred
-## Section               subheading
-- bullet                 • item
-- [ ] todo / - [x] done  checkbox
-**bold**                 bold inline
----                      full-width divider
-plain paragraphs         auto word-wrapped to paper width
-emoji 🎉 ☕ 🐱            crisp monochrome glyphs
-```                      fenced block → verbatim monospace (ASCII art, code)
+# Title large bold, centred
+
+## Section subheading
+
+- bullet • item
+- [ ] todo / - [x] done checkbox **bold** bold inline --- full-width divider plain paragraphs auto word-wrapped to paper width emoji 🎉 ☕ 🐱 crisp monochrome glyphs
+
+```fenced block → verbatim monospace (ASCII art, code)
 ascii art
 ```
-```qr                    fenced block → centred QR code
+
+```qr fenced block → centred QR code
 https://example.com
 ```
 ````
 
 Ready-made samples live in [`examples/`](examples/) — feed any of them to the web UI textarea or the `print_markdown` MCP tool:
 
-| File | Shows |
-| --- | --- |
+| File                                  | Shows                      |
+| ------------------------------------- | -------------------------- |
 | [`showcase.md`](examples/showcase.md) | Every element on one sheet |
-| [`recipe.md`](examples/recipe.md) | Headings, lists, emoji |
-| [`trip.md`](examples/trip.md) | Itinerary with emoji |
-| [`qr.md`](examples/qr.md) | QR codes (URL + wifi) |
-| [`ascii.md`](examples/ascii.md) | Monospace / ASCII art |
+| [`recipe.md`](examples/recipe.md)     | Headings, lists, emoji     |
+| [`trip.md`](examples/trip.md)         | Itinerary with emoji       |
+| [`qr.md`](examples/qr.md)             | QR codes (URL + wifi)      |
+| [`ascii.md`](examples/ascii.md)       | Monospace / ASCII art      |
 
 ## Configure
 
