@@ -1,17 +1,17 @@
-# Trip Plan
+# 🧳 Trip Plan
 
-## Morning
+## 🌅 Morning
 
-- 09:00 Train
+- 09:00 Train 🚆
 - 10:42 Arrive
-- 11:00 Tour
+- 11:00 Tour 🏛️
 
-## Afternoon
+## ☀️ Afternoon
 
-- 13:30 Lunch
-- 15:00 Walk
+- 13:30 Lunch 🍝
+- 15:00 Walk 🚶
 
 ---
 
-Return **18:15** sharp.
-Bring passport.
+Return **18:15** sharp. ⏰
+Bring passport. 🛂
