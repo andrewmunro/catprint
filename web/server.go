@@ -102,7 +102,9 @@ func (d Deps) handlePrintText(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "empty content")
 		return
 	}
-	if res := validate.Validate(md); !res.OK() {
+	// Web UI is human-typed: long lines auto-wrap at render rather than being
+	// rejected. Strict per-line length stays on the MCP/LLM path only.
+	if res := validate.ValidateRelaxed(md); !res.OK() {
 		writeJSON(w, http.StatusUnprocessableEntity, printResp{Error: res.Error, Violations: res.Violations})
 		return
 	}
@@ -177,7 +179,7 @@ func (d Deps) handlePreview(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "empty content")
 		return
 	}
-	if res := validate.Validate(md); !res.OK() {
+	if res := validate.ValidateRelaxed(md); !res.OK() {
 		writeJSON(w, http.StatusUnprocessableEntity, printResp{Error: res.Error, Violations: res.Violations})
 		return
 	}
@@ -243,7 +245,7 @@ func (d Deps) handlePrintShare(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "nothing shared")
 		return
 	}
-	if res := validate.ValidateShared(md); !res.OK() {
+	if res := validate.ValidateRelaxed(md); !res.OK() {
 		http.Redirect(w, r, "/?shared=invalid", http.StatusSeeOther)
 		return
 	}

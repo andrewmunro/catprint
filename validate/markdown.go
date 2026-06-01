@@ -33,11 +33,13 @@ func (r Result) OK() bool { return len(r.Violations) == 0 }
 // handles it gracefully).
 func Validate(md string) Result { return validate(md, true) }
 
-// ValidateShared is the relaxed variant for human-shared plain text (Web Share
-// Target). It skips the per-line length check: shared text routinely exceeds
-// the 32-char paper width, and the renderer word-wraps long lines anyway. The
-// runaway-job and unsupported-block checks still apply.
-func ValidateShared(md string) Result { return validate(md, false) }
+// ValidateRelaxed is the variant for human-entered input (web UI textarea,
+// Android share target). It skips the per-line length check: typed/shared text
+// routinely exceeds the 32-char paper width, and the renderer word-wraps long
+// lines anyway. The runaway-job and unsupported-block checks still apply.
+// The strict Validate (with the per-line check + line-specific feedback) is
+// reserved for the MCP/LLM path.
+func ValidateRelaxed(md string) Result { return validate(md, false) }
 
 func validate(md string, checkLineLength bool) Result {
 	var vs []Violation
