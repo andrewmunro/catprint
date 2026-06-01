@@ -314,11 +314,10 @@ func (q *Queue) drainOnce(ctx context.Context, p *Printer) *Printer {
 		if p == nil {
 			conn, err := q.ensureConnected(ctx)
 			if err != nil {
-				retries, _ := q.cfg.Store.BumpRetry(j.ID, err.Error())
-				if retries >= q.cfg.MaxRetries {
-					_ = q.cfg.Store.MarkFailed(j.ID, err.Error())
-					q.notifyDone(j.ID)
-				}
+				// Printer unreachable — not a bad job. Leave it queued (don't
+				// touch the retry budget) so it prints when the printer comes
+				// back; the hourly sweep expires it if it never does.
+				log.Printf("queue: printer unreachable, job %s stays queued: %v", j.ID, err)
 				time.Sleep(q.cfg.RetryBackoff)
 				return p
 			}
