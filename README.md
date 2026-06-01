@@ -4,11 +4,9 @@
 
 **Print to a cheap BLE thermal printer from Claude, your phone, or any HTTP client.**
 
-A single pure-Go binary: MCP server + web UI + markdown/image renderer + BLE driver for the PD01 58mm thermal printer.
+[![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](https://go.dev) [![Pure Go](https://img.shields.io/badge/CGO-none-success)](https://modernc.org/sqlite) [![MCP](https://img.shields.io/badge/MCP-streamable_HTTP-7C3AED)](https://modelcontextprotocol.io)
 
-[![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](https://go.dev)
-[![Pure Go](https://img.shields.io/badge/CGO-none-success)](https://modernc.org/sqlite)
-[![MCP](https://img.shields.io/badge/MCP-streamable_HTTP-7C3AED)](https://modelcontextprotocol.io)
+<img src="docs/demo.jpg" alt="catprint printout" width="480">
 
 https://github.com/user-attachments/assets/02ecca64-37a6-4081-9977-00868c9267a8
 
@@ -18,7 +16,9 @@ https://github.com/user-attachments/assets/02ecca64-37a6-4081-9977-00868c9267a8
 
 ## What it does
 
-Tell Claude "print my shopping list" and paper comes out. Or share text from any Android app. Or POST markdown over HTTP. catprint validates it against the printer's real constraints, renders it to a 1-bit bitmap, and streams it over Bluetooth.
+Turns a [PD01 58mm BLE thermal printer](https://www.amazon.co.uk/dp/B0CWGYQX41) (a.k.a cat printer) into a cute portable fax machine or simple way to print things from your phone.
+
+Integrates with AI via MCP server, tell Claude "print my shopping list" and paper comes out. Share text from any Android app via an installable PWA. POST markdown or images via the web interface. Catprint validates it against the printer's real constraints, renders it to a 1-bit bitmap, and streams it over Bluetooth.
 
 > **Hardware:** built for the [PD01 58mm BLE thermal printer](https://www.amazon.co.uk/dp/B0CWGYQX41) (~£10).
 
@@ -51,12 +51,12 @@ GOOS=windows GOARCH=amd64 go build -o bin/catprint.exe .
 
 Flags, or the matching env var (load via `.env` — see `.env.example`):
 
-| Flag | Env | Default |
-| --- | --- | --- |
-| `-addr` | `PRINTER_ADDRESS` | empty → scan/discover at runtime |
-| `-port` | `PORT` | `38827` (web at `/`, MCP at `/mcp`) |
-| `-db` | `DB_PATH` | `jobs.db` |
-| `-keepalive` | — | `20s` (`0` = reconnect per job) |
+| Flag         | Env               | Default                             |
+| ------------ | ----------------- | ----------------------------------- |
+| `-addr`      | `PRINTER_ADDRESS` | empty → scan/discover at runtime    |
+| `-port`      | `PORT`            | `38827` (web at `/`, MCP at `/mcp`) |
+| `-db`        | `DB_PATH`         | `jobs.db`                           |
+| `-keepalive` | —                 | `20s` (`0` = reconnect per job)     |
 
 ## Use it from Claude (MCP)
 
@@ -64,23 +64,23 @@ Add to `claude_desktop_config.json` (`~/Library/Application Support/Claude/` on 
 
 ```json
 {
-  "mcpServers": {
-    "catprint": {
-      "type": "http",
-      "url": "http://localhost:38827/mcp"
-    }
-  }
+	"mcpServers": {
+		"catprint": {
+			"type": "http",
+			"url": "http://localhost:38827/mcp"
+		}
+	}
 }
 ```
 
 Restart Claude Desktop — four `catprint` tools appear:
 
-| Tool | Purpose |
-| --- | --- |
+| Tool                       | Purpose                                                         |
+| -------------------------- | --------------------------------------------------------------- |
 | `get_printer_capabilities` | Paper size, line limits, supported markdown subset. Call first. |
-| `get_printer_status` | Reachability, queue depth, last job state. |
-| `print_markdown` | Validate → render → enqueue → return `{job_id, status}`. |
-| `print_image` | Print a base64 image — resized to 384px + dithered. |
+| `get_printer_status`       | Reachability, queue depth, last job state.                      |
+| `print_markdown`           | Validate → render → enqueue → return `{job_id, status}`.        |
+| `print_image`              | Print a base64 image — resized to 384px + dithered.             |
 
 `print_markdown` returns `{error: "validation_failed", violations: [...]}` when content breaks a constraint, so the model can fix the offending line and retry.
 
@@ -135,10 +135,10 @@ Shared text is printed verbatim (line breaks preserved, word-wrapped to paper wi
 
 Standalone tools under `scripts/` (`go build ./scripts/<name>`) — they talk to the printer directly, no server needed.
 
-| Script | Use |
-| --- | --- |
-| `scan` | List BLE devices to find the printer's MAC. |
-| `test_print` | Print a 384×60 black rectangle (driver smoke test). |
+| Script        | Use                                                                  |
+| ------------- | -------------------------------------------------------------------- |
+| `scan`        | List BLE devices to find the printer's MAC.                          |
+| `test_print`  | Print a 384×60 black rectangle (driver smoke test).                  |
 | `test_render` | Render the example docs to PNG (no printer) to eyeball fonts/layout. |
 
 ## Repository layout
