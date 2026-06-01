@@ -28,7 +28,7 @@ type Job struct {
 	ID         string
 	CreatedAt  time.Time
 	ExpiresAt  time.Time
-	Source     string // "mcp" | "web" | "voice" | "apk"
+	Source     string // "mcp" | "web" | "apk"
 	Status     Status
 	Content    string // full markdown
 	Error      string

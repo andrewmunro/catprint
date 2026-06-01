@@ -364,7 +364,7 @@ $('title').addEventListener('input', schedulePreview);
 
 $('printBtn').onclick = doPrint;
 const shared = new URLSearchParams(location.search).get('shared');
-if (shared === 'invalid') toast('shared content rejected (too long or unsupported)');
+if (shared === 'invalid') toast('shared content rejected (too many lines, or tables/images/links)');
 else if (shared) toast('shared to printer');
 
 refreshStatus(); refreshJobs();

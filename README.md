@@ -2,18 +2,14 @@
 
 Go server + MCP tools to drive a PD01 BLE thermal printer from Claude, scripts, or HTTP.
 
-## Status
+## Capabilities
 
-| Phase | What | Done |
-| --- | --- | --- |
-| 1 | PD01 BLE driver, SQLite job queue | ✓ |
-| 2 | Markdown renderer + validator | ✓ |
-| 3 | MCP server (4 tools, HTTP transport) | ✓ |
-| 4 | Web UI + Android PWA | ✓ |
-| 5 | Voice + Python Workspace sidecar | — |
-| 6 | Systemd + Cloudflare tunnel | ✓ |
-| 7 | Android Print Service APK | — |
-| 8 | Image printing (Floyd–Steinberg) | ✓ |
+- PD01 BLE driver with connect-on-demand + SQLite job queue (persist, retry, reprint)
+- Markdown renderer (goldmark → 1-bit bitmap) with pre-render validator
+- Image printing (Floyd–Steinberg dither to 384px)
+- MCP server (HTTP transport) — print from Claude
+- Web UI + Android PWA share target
+- Systemd + Cloudflare tunnel deploy
 
 ## Build
 
@@ -29,7 +25,7 @@ Pure Go (modernc.org/sqlite). No CGO, no mingw needed.
 
 ```bash
 ./bin/catprint -addr D1:01:04:14:52:B4
-# or rely on .printer_addr / scan:
+# or set PRINTER_ADDRESS in .env, then:
 ./bin/catprint
 ```
 
@@ -37,7 +33,7 @@ Flags / env:
 
 | Flag | Env | Default |
 | --- | --- | --- |
-| `-addr` | `PRINTER_ADDRESS` | scan + cache to `.printer_addr` |
+| `-addr` | `PRINTER_ADDRESS` | empty → scan/discover at runtime |
 | `-port` | `PORT` | `38827` (web at `/`, MCP at `/mcp`) |
 | `-db` | `DB_PATH` | `jobs.db` |
 | `-keepalive` | — | `20s` (0 = reconnect per job) |

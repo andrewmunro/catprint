@@ -19,17 +19,14 @@ import (
 	"github.com/synestry/catprint/mcp"
 	"github.com/synestry/catprint/printer"
 	"github.com/synestry/catprint/render"
-	"github.com/synestry/catprint/voice"
 	"github.com/synestry/catprint/web"
 )
 
 func main() {
-	addr := flag.String("addr", getenv("PRINTER_ADDRESS", ""), "BLE MAC; if blank, discovered + cached")
+	addr := flag.String("addr", getenv("PRINTER_ADDRESS", ""), "BLE MAC; if blank, discovered at runtime")
 	port := flag.String("port", getenv("PORT", "38827"), "HTTP listen port (serves web at / and MCP at /mcp)")
 	dbPath := flag.String("db", getenv("DB_PATH", "jobs.db"), "SQLite path")
-	addrCache := flag.String("addr-cache", ".printer_addr", "MAC cache file")
 	keepalive := flag.Duration("keepalive", 20*time.Second, "BLE ping interval (0 disables, reconnect per job)")
-	geminiKey := flag.String("gemini-key", getenv("GOOGLE_API_KEY", ""), "Gemini API key for /voice (empty disables voice)")
 	flag.Parse()
 
 	store, err := jobs.Open(*dbPath)
@@ -42,7 +39,6 @@ func main() {
 		Store:             store,
 		Render:            renderForQueue,
 		PrinterAddr:       *addr,
-		AddrCachePath:     *addrCache,
 		KeepAliveInterval: *keepalive,
 	})
 	if err != nil {
@@ -77,7 +73,6 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
-	mux.Handle("/voice", voice.Handler(voice.Deps{Queue: q, APIKey: *geminiKey}))
 	mux.Handle("/", web.Handler(web.Deps{Queue: q, Store: store}))
 
 	httpSrv := &http.Server{

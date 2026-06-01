@@ -243,7 +243,7 @@ func (d Deps) handlePrintShare(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "nothing shared")
 		return
 	}
-	if res := validate.Validate(md); !res.OK() {
+	if res := validate.ValidateShared(md); !res.OK() {
 		http.Redirect(w, r, "/?shared=invalid", http.StatusSeeOther)
 		return
 	}
@@ -278,7 +278,7 @@ func (d Deps) handleStatus(w http.ResponseWriter, _ *http.Request) {
 	queued, _ := d.Store.CountByStatus(jobs.StatusQueued)
 	failed, _ := d.Store.CountByStatus(jobs.StatusFailed)
 	writeJSON(w, http.StatusOK, statusResp{
-		Reachable:        d.Queue.Addr() != "",
+		Reachable:        d.Queue.Online(),
 		PrinterAddr:      d.Queue.Addr(),
 		QueueDepth:       queued,
 		JobsPendingRetry: failed,

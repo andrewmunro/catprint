@@ -31,7 +31,15 @@ func (r Result) OK() bool { return len(r.Violations) == 0 }
 // Validate scans markdown line-by-line against the printer's constraints.
 // Empty content is treated as valid (LLM may submit a blank line — renderer
 // handles it gracefully).
-func Validate(md string) Result {
+func Validate(md string) Result { return validate(md, true) }
+
+// ValidateShared is the relaxed variant for human-shared plain text (Web Share
+// Target). It skips the per-line length check: shared text routinely exceeds
+// the 32-char paper width, and the renderer word-wraps long lines anyway. The
+// runaway-job and unsupported-block checks still apply.
+func ValidateShared(md string) Result { return validate(md, false) }
+
+func validate(md string, checkLineLength bool) Result {
 	var vs []Violation
 	lines := strings.Split(md, "\n")
 
@@ -98,12 +106,14 @@ func Validate(md string) Result {
 		}
 
 		// General line length check (after stripping bullet/checkbox markers).
-		body := stripListMarker(trimmed)
-		if n := utf8.RuneCountInString(body); n > printer.MaxLineLengthChars {
-			vs = append(vs, Violation{
-				Line: lineNum, Issue: "exceeds max_line_length_chars",
-				Actual: n, Content: trimmed,
-			})
+		if checkLineLength {
+			body := stripListMarker(trimmed)
+			if n := utf8.RuneCountInString(body); n > printer.MaxLineLengthChars {
+				vs = append(vs, Violation{
+					Line: lineNum, Issue: "exceeds max_line_length_chars",
+					Actual: n, Content: trimmed,
+				})
+			}
 		}
 	}
 

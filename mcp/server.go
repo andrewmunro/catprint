@@ -88,7 +88,7 @@ func registerStatus(srv *mcpsdk.Server, d Deps) {
 		}
 
 		out := statusOut{
-			Reachable:        d.Queue.Addr() != "",
+			Reachable:        d.Queue.Online(),
 			LastJobStatus:    last,
 			QueueDepth:       queued,
 			JobsPendingRetry: failed,

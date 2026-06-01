@@ -13,9 +13,7 @@ import (
 	"fmt"
 	"image"
 	"log"
-	"os"
 	"runtime"
-	"strings"
 	"sync"
 	"time"
 
@@ -35,7 +33,6 @@ type Config struct {
 	Render            Renderer
 	Connect           Connector
 	PrinterAddr       string
-	AddrCachePath     string
 	PollInterval      time.Duration
 	SweepInterval     time.Duration
 	MaxRetries        int
@@ -79,6 +76,7 @@ type Queue struct {
 
 	addrMu sync.Mutex
 	addr   string
+	online bool // last connect attempt succeeded
 
 	// Subscribers waiting for specific job completion. Keyed by job ID.
 	waitMu sync.Mutex
@@ -201,6 +199,20 @@ func (q *Queue) setAddr(a string) {
 	q.addrMu.Unlock()
 }
 
+// Online reports whether the last connect attempt succeeded. Unlike Addr,
+// which only says a MAC is known, this reflects real reachability.
+func (q *Queue) Online() bool {
+	q.addrMu.Lock()
+	defer q.addrMu.Unlock()
+	return q.online
+}
+
+func (q *Queue) setOnline(v bool) {
+	q.addrMu.Lock()
+	q.online = v
+	q.addrMu.Unlock()
+}
+
 func (q *Queue) run(ctx context.Context) {
 	defer close(q.doneCh)
 
@@ -263,6 +275,7 @@ func (q *Queue) run(ctx context.Context) {
 					log.Printf("queue: keepalive ping failed: %v — dropping conn", err)
 					_ = p.Close()
 					p = nil
+					q.setOnline(false)
 				}
 			}
 			// Self-heal: if we have no connection (ping just failed, a print
@@ -346,13 +359,13 @@ func (q *Queue) printOne(ctx context.Context, p *Printer, j *jobs.Job) error {
 }
 
 func (q *Queue) ensureConnected(ctx context.Context) (*Printer, error) {
+	p, err := q.connect(ctx)
+	q.setOnline(err == nil)
+	return p, err
+}
+
+func (q *Queue) connect(ctx context.Context) (*Printer, error) {
 	addr := q.Addr()
-	if addr == "" {
-		if cached := readAddrCache(q.cfg.AddrCachePath); cached != "" {
-			addr = cached
-			q.setAddr(addr)
-		}
-	}
 	if addr == "" {
 		dctx, cancel := context.WithTimeout(ctx, q.cfg.ConnectTimeout)
 		defer cancel()
@@ -362,7 +375,6 @@ func (q *Queue) ensureConnected(ctx context.Context) (*Printer, error) {
 		}
 		addr = a
 		q.setAddr(addr)
-		writeAddrCache(q.cfg.AddrCachePath, addr)
 	}
 	cctx, cancel := context.WithTimeout(ctx, q.cfg.ConnectTimeout)
 	defer cancel()
@@ -388,22 +400,4 @@ func warmCache(ctx context.Context, timeout time.Duration) {
 		d = timeout
 	}
 	_, _ = ble.Scan(d)
-}
-
-func readAddrCache(path string) string {
-	if path == "" {
-		return ""
-	}
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(b))
-}
-
-func writeAddrCache(path, addr string) {
-	if path == "" {
-		return
-	}
-	_ = os.WriteFile(path, []byte(addr+"\n"), 0o644)
 }

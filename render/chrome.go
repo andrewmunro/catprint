@@ -13,7 +13,7 @@ import (
 // callers don't accidentally render with default zero values.
 type Chrome struct {
 	Now    time.Time
-	Source string // "mcp" | "web" | "voice" | "apk"
+	Source string // "mcp" | "web" | "apk"
 }
 
 // DefaultChrome returns chrome with current time and the given source tag.
@@ -21,7 +21,7 @@ func DefaultChrome(source string) Chrome {
 	return Chrome{Now: time.Now(), Source: source}
 }
 
-// formatHeader returns the timestamp line, e.g. "Sat 31 May · 07:32  [voice]".
+// formatHeader returns the timestamp line, e.g. "Sat 31 May · 07:32  [web]".
 func formatHeader(c Chrome) string {
 	src := c.Source
 	if src == "" {
