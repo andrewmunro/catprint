@@ -10,7 +10,7 @@ import (
 	"image"
 	_ "image/gif"
 	_ "image/jpeg"
-	_ "image/png"
+	"image/png"
 	"strings"
 
 	_ "golang.org/x/image/bmp"
@@ -61,6 +61,49 @@ func NormalizeImageInput(input string) (string, error) {
 		return "", fmt.Errorf("unsupported or corrupt image: %w", err)
 	}
 	return EncodeImageJob("image/"+format, base64.StdEncoding.EncodeToString(raw)), nil
+}
+
+// DecodeImageInput accepts a bare base64 string or a data: URI and returns the
+// decoded image. Used by the web photo-options path for preview and baking.
+func DecodeImageInput(input string) (image.Image, error) {
+	input = strings.TrimSpace(input)
+	b64 := input
+	if strings.HasPrefix(input, "data:") {
+		comma := strings.IndexByte(input, ',')
+		if comma < 0 {
+			return nil, fmt.Errorf("malformed data URI")
+		}
+		b64 = input[comma+1:]
+	}
+	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(b64))
+	if err != nil {
+		return nil, fmt.Errorf("decode base64: %w", err)
+	}
+	img, _, err := image.Decode(bytes.NewReader(raw))
+	if err != nil {
+		return nil, fmt.Errorf("unsupported or corrupt image: %w", err)
+	}
+	return img, nil
+}
+
+// BakeImageJob applies the given photo options now and returns a canonical
+// data URI of the final 1-bit PNG. Stored as job content so reprint, history
+// thumbnails, and the actual print all reproduce exactly what was tuned — the
+// render path then just passes the frozen pixels through.
+func BakeImageJob(input string, opts ImageOptions) (string, error) {
+	src, err := DecodeImageInput(input)
+	if err != nil {
+		return "", err
+	}
+	out, err := Process(src, opts)
+	if err != nil {
+		return "", err
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, out); err != nil {
+		return "", fmt.Errorf("encode png: %w", err)
+	}
+	return EncodeImageJob("image/png", base64.StdEncoding.EncodeToString(buf.Bytes())), nil
 }
 
 func renderImageDataURI(uri string) (*image.Gray, error) {

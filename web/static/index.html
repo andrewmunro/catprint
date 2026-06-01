@@ -108,6 +108,10 @@
     cursor: pointer; margin: 0;
   }
   #imageName { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .imgopts { margin-top: 10px; padding: 12px; background: var(--line); border-radius: 10px; }
+  .imgopts label { display: block; margin: 8px 0 2px; font-size: 0.8rem; font-weight: 600; }
+  .imgopts label:first-child { margin-top: 0; }
+  .imgopts select, .imgopts input[type=range] { width: 100%; }
   body.dragging::after {
     content: "drop image to print";
     position: fixed; inset: 12px; z-index: 20;
@@ -132,6 +136,23 @@
     <label class="filebtn">📷 Image…<input type="file" id="imageInput" accept="image/png,image/jpeg,image/gif,image/bmp,image/webp" hidden></label>
     <span id="imageName" class="sub">or drag / paste an image</span>
     <button id="clearImage" class="reprint" hidden>clear</button>
+  </div>
+
+  <div class="imgopts" id="imgOpts" hidden>
+    <label for="optMode">Photo style</label>
+    <select id="optMode">
+      <option value="floyd">Floyd–Steinberg (photos)</option>
+      <option value="atkinson">Atkinson (punchy)</option>
+      <option value="threshold">Threshold (line art)</option>
+    </select>
+    <label for="optBright">Brightness <span id="optBrightVal" class="sub">0</span></label>
+    <input type="range" id="optBright" min="-100" max="100" value="0">
+    <label for="optContrast">Contrast <span id="optContrastVal" class="sub">0</span></label>
+    <input type="range" id="optContrast" min="-100" max="100" value="0">
+    <div id="optThreshRow" hidden>
+      <label for="optThresh">Threshold <span id="optThreshVal" class="sub">128</span></label>
+      <input type="range" id="optThresh" min="0" max="255" value="128">
+    </div>
   </div>
 
   <button class="primary" id="printBtn">🖨 Print</button>
@@ -235,7 +256,7 @@ async function doPrint() {
 async function printImage() {
   $('printBtn').disabled = true;
   try {
-    const fd = new FormData(); fd.append('image', selectedImage);
+    const fd = new FormData(); fd.append('image', selectedImage); appendOpts(fd);
     const res = await fetch('/print/image', { method: 'POST', body: fd });
     const j = await res.json();
     if (j.error) { toast('error: ' + j.error); }
@@ -255,18 +276,40 @@ function clearImage() {
   $('imageInput').value = '';
   $('imageName').textContent = 'or drag / paste an image';
   $('clearImage').hidden = true;
+  $('imgOpts').hidden = true;
   schedulePreview(); // fall back to text preview
 }
+// --- photo options ---
+function appendOpts(fd) {
+  fd.append('mode', $('optMode').value);
+  fd.append('brightness', $('optBright').value);
+  fd.append('contrast', $('optContrast').value);
+  fd.append('threshold', $('optThresh').value);
+}
+function syncOptLabels() {
+  $('optBrightVal').textContent = $('optBright').value;
+  $('optContrastVal').textContent = $('optContrast').value;
+  $('optThreshVal').textContent = $('optThresh').value;
+  $('optThreshRow').hidden = $('optMode').value !== 'threshold';
+}
+['optMode','optBright','optContrast','optThresh'].forEach(id =>
+  $(id).addEventListener('input', () => { syncOptLabels(); schedulePreview(); }));
+
 async function selectImageFile(f) {
   if (!f || !f.type.startsWith('image/')) { toast('not an image'); return; }
   selectedImage = f;
   $('imageName').textContent = f.name || 'pasted image';
   $('clearImage').hidden = false;
-  // Render dithered preview.
+  $('imgOpts').hidden = false;
+  await previewImage();
+}
+
+async function previewImage() {
+  if (!selectedImage) return;
   $('paperWrap').classList.add('stale');
   const seq = ++previewSeq;
   try {
-    const fd = new FormData(); fd.append('image', f);
+    const fd = new FormData(); fd.append('image', selectedImage); appendOpts(fd);
     const res = await fetch('/preview/image', { method: 'POST', body: fd });
     if (seq !== previewSeq) return;
     if (res.ok) {
@@ -327,7 +370,7 @@ let previewTimer = null, previewURL = null, previewSeq = 0;
 function schedulePreview() {
   $('paperWrap').classList.add('stale');
   clearTimeout(previewTimer);
-  previewTimer = setTimeout(renderPreview, 450);
+  previewTimer = setTimeout(selectedImage ? previewImage : renderPreview, 450);
 }
 async function renderPreview() {
   const content = $('content').value, title = $('title').value;
@@ -367,6 +410,7 @@ const shared = new URLSearchParams(location.search).get('shared');
 if (shared === 'invalid') toast('shared content rejected (too many lines, or tables/images/links)');
 else if (shared) toast('shared to printer');
 
+syncOptLabels();
 refreshStatus(); refreshJobs();
 setInterval(() => { refreshStatus(); refreshJobs(); }, 5000);
 

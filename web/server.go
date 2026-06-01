@@ -22,6 +22,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -112,34 +113,75 @@ func (d Deps) handlePrintText(w http.ResponseWriter, r *http.Request) {
 }
 
 // readImageUpload pulls image bytes from either a multipart "image" file or a
-// JSON {base64_image} body, and returns a canonical image-job data URI.
-func readImageUpload(r *http.Request) (string, error) {
+// JSON {base64_image} body, plus the photo options (mode/brightness/contrast/
+// threshold) carried alongside. Returns a bare base64 string for the image.
+func readImageUpload(r *http.Request) (string, render.ImageOptions, error) {
 	ct := r.Header.Get("Content-Type")
 	if strings.HasPrefix(ct, "multipart/form-data") {
 		f, _, err := r.FormFile("image")
 		if err != nil {
-			return "", fmt.Errorf("no image file")
+			return "", render.ImageOptions{}, fmt.Errorf("no image file")
 		}
 		defer f.Close()
 		raw, err := io.ReadAll(io.LimitReader(f, 16<<20)) // 16 MB cap
 		if err != nil {
-			return "", err
+			return "", render.ImageOptions{}, err
 		}
-		return render.NormalizeImageInput(base64.StdEncoding.EncodeToString(raw))
+		opts := render.DefaultImageOptions()
+		if v := r.FormValue("mode"); v != "" {
+			opts.Mode = render.DitherMode(v)
+		}
+		opts.Brightness = atoiDefault(r.FormValue("brightness"), opts.Brightness)
+		opts.Contrast = atoiDefault(r.FormValue("contrast"), opts.Contrast)
+		opts.Threshold = atoiDefault(r.FormValue("threshold"), opts.Threshold)
+		return base64.StdEncoding.EncodeToString(raw), opts, nil
 	}
 	var body struct {
 		Base64Image string `json:"base64_image"`
+		Mode        string `json:"mode"`
+		Brightness  *int   `json:"brightness"`
+		Contrast    *int   `json:"contrast"`
+		Threshold   *int   `json:"threshold"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		return "", fmt.Errorf("invalid json")
+		return "", render.ImageOptions{}, fmt.Errorf("invalid json")
 	}
-	return render.NormalizeImageInput(body.Base64Image)
+	opts := render.DefaultImageOptions()
+	if body.Mode != "" {
+		opts.Mode = render.DitherMode(body.Mode)
+	}
+	if body.Brightness != nil {
+		opts.Brightness = *body.Brightness
+	}
+	if body.Contrast != nil {
+		opts.Contrast = *body.Contrast
+	}
+	if body.Threshold != nil {
+		opts.Threshold = *body.Threshold
+	}
+	return body.Base64Image, opts, nil
 }
 
-// handlePrintImage accepts an uploaded image (multipart or base64 JSON),
-// dithers it, and enqueues it.
+func atoiDefault(s string, def int) int {
+	if s == "" {
+		return def
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return def
+	}
+	return n
+}
+
+// handlePrintImage accepts an uploaded image (multipart or base64 JSON), bakes
+// the chosen photo options into a final 1-bit PNG, and enqueues it.
 func (d Deps) handlePrintImage(w http.ResponseWriter, r *http.Request) {
-	content, err := readImageUpload(r)
+	input, opts, err := readImageUpload(r)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	content, err := render.BakeImageJob(input, opts)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
@@ -147,15 +189,20 @@ func (d Deps) handlePrintImage(w http.ResponseWriter, r *http.Request) {
 	d.enqueueAndRespond(w, "web", content)
 }
 
-// handlePreviewImage dithers an uploaded image and returns the PNG preview
-// without enqueuing.
+// handlePreviewImage processes an uploaded image with the given options and
+// returns the PNG preview without enqueuing.
 func (d Deps) handlePreviewImage(w http.ResponseWriter, r *http.Request) {
-	content, err := readImageUpload(r)
+	input, opts, err := readImageUpload(r)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	img, err := render.RenderContent(content, render.DefaultChrome("web"))
+	src, err := render.DecodeImageInput(input)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	img, err := render.Process(src, opts)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
