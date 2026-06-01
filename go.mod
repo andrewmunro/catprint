@@ -9,6 +9,7 @@ require (
 	github.com/yuin/goldmark v1.2.1
 	golang.org/x/image v0.41.0
 	modernc.org/sqlite v1.51.0
+	rsc.io/qr v0.2.0
 	tinygo.org/x/bluetooth v0.8.0
 )
 

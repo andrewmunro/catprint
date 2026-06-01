@@ -15,6 +15,7 @@ import (
 	gmext "github.com/yuin/goldmark/extension"
 	gmastx "github.com/yuin/goldmark/extension/ast"
 	"github.com/yuin/goldmark/text"
+	"rsc.io/qr"
 )
 
 // Width of paper in pixels — mirrors printer.PrintWidthPx to avoid an import cycle.
@@ -98,6 +99,9 @@ func drawBlock(img *image.Gray, n ast.Node, src []byte, y int) (int, error) {
 	case *ast.List:
 		return drawList(img, b, src, y)
 	case *ast.FencedCodeBlock:
+		if string(b.Language(src)) == "qr" {
+			return drawQR(img, codeBlockText(b, src), y)
+		}
 		return drawMonoBlock(img, codeBlockText(b, src), y)
 	case *ast.CodeBlock:
 		return drawMonoBlock(img, codeBlockText(b, src), y)
@@ -243,6 +247,56 @@ func drawMonoBlock(img *image.Gray, text string, y int) (int, error) {
 		y += lh
 	}
 	return y - startY + LineGapPx, nil
+}
+
+// drawQR renders a centred QR code from the fence body (a ```qr block). The
+// payload is the trimmed block text — a URL, wifi string, or any short text.
+// Modules are scaled to an integer pixel size so edges stay crisp on thermal,
+// with a 4-module quiet zone (required by the spec for reliable scanning).
+func drawQR(img *image.Gray, payload string, y int) (int, error) {
+	payload = strings.TrimSpace(payload)
+	if payload == "" {
+		return 0, nil
+	}
+	code, err := qr.Encode(payload, qr.M)
+	if err != nil {
+		return 0, fmt.Errorf("qr encode: %w", err)
+	}
+	const quiet = 4 // quiet-zone modules each side
+	total := code.Size + 2*quiet
+	scale := PrintWidthPx / total // largest integer module size that fits width
+	if scale < 1 {
+		scale = 1 // oversized payload: 1px modules, may exceed width (clipped)
+	}
+	dim := total * scale
+	offX := (PrintWidthPx - dim) / 2
+	if offX < 0 {
+		offX = 0
+	}
+	const padY = 8
+	top := y + padY
+
+	// White backing (quiet zone) then black modules.
+	for yy := 0; yy < dim; yy++ {
+		for xx := 0; xx < dim; xx++ {
+			img.SetGray(offX+xx, top+yy, color.Gray{Y: 255})
+		}
+	}
+	for my := 0; my < code.Size; my++ {
+		for mx := 0; mx < code.Size; mx++ {
+			if !code.Black(mx, my) {
+				continue
+			}
+			px := offX + (mx+quiet)*scale
+			py := top + (my+quiet)*scale
+			for dy := 0; dy < scale; dy++ {
+				for dx := 0; dx < scale; dx++ {
+					img.SetGray(px+dx, py+dy, color.Gray{Y: 0})
+				}
+			}
+		}
+	}
+	return padY + dim + padY + LineGapPx, nil
 }
 
 // drawRule draws a full-width horizontal line and returns total y consumed.

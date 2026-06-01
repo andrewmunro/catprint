@@ -26,6 +26,7 @@ var SupportedMarkdown = []string{
 	"plain paragraphs (auto word-wrapped at 32 chars)",
 	"emoji 🎉 (monochrome, rendered via Noto Emoji — encouraged for visual interest)",
 	"```fenced blocks``` (verbatim monospace, auto-scaled to fit width — use for ASCII art, tables you draw by hand, or code; spaces preserved, no wrapping or line-length limit inside)",
+	"```qr blocks``` (the block body becomes a centred QR code — use for URLs, wifi credentials, or any short text the reader should scan)",
 }
 
 var UnsupportedMarkdown = []string{
