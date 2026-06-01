@@ -1,90 +1,66 @@
-# catprint
+<div align="center">
 
-Go server + MCP tools to drive a PD01 BLE thermal printer from Claude, scripts, or HTTP.
+# 🐱🖨️ catprint
 
-## Capabilities
+**Print to a cheap BLE thermal printer from Claude, your phone, or any HTTP client.**
 
-- PD01 BLE driver with connect-on-demand + SQLite job queue (persist, retry, reprint)
-- Markdown renderer (goldmark → 1-bit bitmap) with pre-render validator
-- Image printing (Floyd–Steinberg dither to 384px)
-- MCP server (HTTP transport) — print from Claude
-- Web UI + Android PWA share target
-- Systemd + Cloudflare tunnel deploy
+A single pure-Go binary: MCP server + web UI + markdown/image renderer + BLE driver for the PD01 58mm thermal printer.
 
-## Build
+[![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![Pure Go](https://img.shields.io/badge/CGO-none-success)](https://modernc.org/sqlite)
+[![MCP](https://img.shields.io/badge/MCP-streamable_HTTP-7C3AED)](https://modelcontextprotocol.io)
+
+https://github.com/user-attachments/assets/02ecca64-37a6-4081-9977-00868c9267a8
+
+</div>
+
+---
+
+## What it does
+
+Tell Claude "print my shopping list" and paper comes out. Or share text from any Android app. Or POST markdown over HTTP. catprint validates it against the printer's real constraints, renders it to a 1-bit bitmap, and streams it over Bluetooth.
+
+> **Hardware:** built for the [PD01 58mm BLE thermal printer](https://www.amazon.co.uk/dp/B0CWGYQX41) (~£10).
+
+- 🖨️ **PD01 BLE driver** — connect-on-demand, keepalive to defeat idle sleep
+- 📝 **Markdown renderer** — goldmark → 384px 1-bit bitmap, embedded Noto fonts + emoji
+- 🖼️ **Image printing** — any PNG/JPEG/GIF/BMP, resized + Floyd–Steinberg dithered
+- ✅ **Pre-render validator** — catches over-long lines / unsupported syntax before paper is wasted, with line-specific feedback the LLM can self-correct
+- 🤖 **MCP server** — four tools over streamable HTTP; print straight from Claude
+- 📱 **Web UI + Android PWA** — share-sheet target, job history, reprint
+- 💾 **SQLite job queue** — persist, retry, expire, reprint
+- 🪶 **One static binary** — pure Go, no CGO, Linux + Windows
+
+## Quick start
 
 ```bash
-go mod tidy
-go build ./...                                        # linux
+go build ./...                 # build server + scripts
+go run ./scripts/scan          # find your printer's BLE MAC
+./bin/catprint -addr AA:BB:CC:DD:EE:FF
+```
+
+Open <http://localhost:38827> and print from the browser, or wire it into Claude (below).
+
+Cross-compile for Windows (still no CGO):
+
+```bash
 GOOS=windows GOARCH=amd64 go build -o bin/catprint.exe .
 ```
 
-Pure Go (modernc.org/sqlite). No CGO, no mingw needed.
+## Configure
 
-## Run
-
-```bash
-./bin/catprint -addr D1:01:04:14:52:B4
-# or set PRINTER_ADDRESS in .env, then:
-./bin/catprint
-```
-
-Flags / env:
+Flags, or the matching env var (load via `.env` — see `.env.example`):
 
 | Flag | Env | Default |
 | --- | --- | --- |
 | `-addr` | `PRINTER_ADDRESS` | empty → scan/discover at runtime |
 | `-port` | `PORT` | `38827` (web at `/`, MCP at `/mcp`) |
 | `-db` | `DB_PATH` | `jobs.db` |
-| `-keepalive` | — | `20s` (0 = reconnect per job) |
+| `-keepalive` | — | `20s` (`0` = reconnect per job) |
 
-The keepalive ticker holds the BLE connection open and sends a `GetDevState` ping at that interval to defeat the printer's idle sleep.
+## Use it from Claude (MCP)
 
-### Linux / BlueZ notes
-
-- Requires the `bluez` package and a running `bluetooth` service (`sudo apt-get install -y bluez && sudo systemctl enable --now bluetooth`).
-- `PRINTER_ADDRESS` is **required** — auto-discovery by name does not work on BlueZ (the printer's name appears only in active-scan responses). Find the MAC with `go run ./scripts/scan` while the printer is awake and nearby.
-- BlueZ can't connect to a MAC it hasn't seen advertise since boot. The queue handles this: on a failed connect it runs a short scan to warm the cache, then retries.
-
-## Deploy (systemd + Cloudflare tunnel)
-
-This host runs the server under systemd; a separate `cloudflared` service (token-managed via the Cloudflare Zero Trust dashboard) provides the public HTTPS endpoint.
-
-```bash
-cp .env.example .env      # edit PRINTER_ADDRESS, PORT, DB_PATH
-make install              # builds, installs unit, enables + starts (needs sudo)
-make logs                 # tail
-make restart              # rebuild + restart after code changes
-```
-
-### Cloudflare ingress
-
-The tunnel routing is configured in the Cloudflare Zero Trust dashboard (Networks → Tunnels → your tunnel → Public Hostnames), since this tunnel runs with a token rather than a local `config.yml`. Web UI and MCP share one port, so a single public hostname covers everything:
-
-| Public hostname | Service |
-| --- | --- |
-| `print.example.com` | `http://localhost:38827` |
-
-The web UI is then at `https://print.example.com/` and MCP at `https://print.example.com/mcp`.
-
-PWA install and the Android share-sheet target require HTTPS — they work once the tunnel hostname is live, not over plain-LAN `http`.
-
-## MCP tools
-
-`POST http://<host>:38827/mcp` (streamable HTTP transport):
-
-| Tool | Purpose |
-| --- | --- |
-| `get_printer_capabilities` | Paper size, line limits, supported markdown subset. Call this first. |
-| `get_printer_status` | Reachability, queue depth, last job state. |
-| `print_markdown` | Validate → render → enqueue → wait → return `{job_id, status}`. |
-| `print_image` | Print a base64 PNG/JPEG/GIF/BMP — resized to 384px + Floyd–Steinberg dithered. |
-
-`print_markdown` returns an `IsError` result with `{error: "validation_failed", violations: [...]}` if the markdown violates the constraints. The LLM should call `get_printer_capabilities`, correct the line, and retry.
-
-## Claude Desktop config
-
-Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+Add to `claude_desktop_config.json` (`~/Library/Application Support/Claude/` on macOS, `%APPDATA%\Claude\` on Windows):
 
 ```json
 {
@@ -97,22 +73,19 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) o
 }
 ```
 
-For a remote server (later phases with Cloudflare tunnel):
+Restart Claude Desktop — four `catprint` tools appear:
 
-```json
-{
-  "mcpServers": {
-    "catprint": {
-      "type": "http",
-      "url": "https://your-tunnel.example.com/mcp"
-    }
-  }
-}
-```
+| Tool | Purpose |
+| --- | --- |
+| `get_printer_capabilities` | Paper size, line limits, supported markdown subset. Call first. |
+| `get_printer_status` | Reachability, queue depth, last job state. |
+| `print_markdown` | Validate → render → enqueue → return `{job_id, status}`. |
+| `print_image` | Print a base64 image — resized to 384px + dithered. |
 
-Restart Claude Desktop. Open the tools menu; you should see four `catprint` tools.
+`print_markdown` returns `{error: "validation_failed", violations: [...]}` when content breaks a constraint, so the model can fix the offending line and retry.
 
-## Quick test from curl
+<details>
+<summary>Drive it with raw curl</summary>
 
 ```bash
 SESSION=$(curl -s -D - -X POST -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
@@ -127,28 +100,56 @@ curl -s -X POST -H 'Content-Type: application/json' -H 'Accept: application/json
   http://localhost:38827/mcp
 ```
 
+</details>
+
+## Run as a service
+
+```bash
+cp .env.example .env      # set PRINTER_ADDRESS, PORT, DB_PATH
+make install              # build + install systemd unit + start (needs sudo)
+make logs                 # tail logs
+make restart              # rebuild + restart after changes
+```
+
+To reach it remotely (and to install the PWA / use the Android share target, which need HTTPS), put any HTTPS reverse proxy or tunnel in front of the single port — Cloudflare Tunnel, Tailscale Funnel, ngrok, or Caddy all work. Web UI lands at `/`, MCP at `/mcp`, so one public hostname covers both. Point the Claude config `url` at `https://<your-host>/mcp`.
+
+> ⚠️ The MCP endpoint has **no auth**. Add a token or access policy before exposing it publicly.
+
+## Print from your phone
+
+The web UI is an installable PWA and registers as an Android **share target**.
+
+1. Open `https://<your-host>/` in Chrome on Android (HTTPS required — see above).
+2. **Add to Home screen** to install it as an app.
+3. From any app, hit **Share → catprint** to send text or an image straight to the printer.
+
+Shared text is printed verbatim (line breaks preserved, word-wrapped to paper width); shared images are dithered and printed. Jobs land in the same queue and history as everything else.
+
+## Linux / BlueZ notes
+
+- Needs `bluez` + a running `bluetooth` service: `sudo apt-get install -y bluez && sudo systemctl enable --now bluetooth`.
+- `PRINTER_ADDRESS` is effectively required — name-based discovery doesn't work on BlueZ (the printer only puts its name in active-scan responses). Get the MAC with `go run ./scripts/scan` while the printer is awake and nearby.
+- BlueZ can't connect to a MAC it hasn't seen advertise since boot. The queue self-heals: on a failed connect it runs a short scan to warm the cache, then retries.
+
 ## Diagnostic scripts
 
-Standalone tools under `scripts/` — build with `go build ./scripts/<name>`. They talk to the printer directly and do not need the server running.
+Standalone tools under `scripts/` (`go build ./scripts/<name>`) — they talk to the printer directly, no server needed.
 
 | Script | Use |
 | --- | --- |
-| `scan` | List BLE devices (find the printer's MAC). One-time setup. |
-| `test_print` | Print a 384×60 black rectangle (driver/protocol smoke test). |
-| `test_render` | Render the example docs to PNG (no printer) to eyeball fonts and layout. |
-
-## Examples
-
-`examples/` contains small markdown files you can feed to the web UI textarea or the `print_markdown` MCP tool.
+| `scan` | List BLE devices to find the printer's MAC. |
+| `test_print` | Print a 384×60 black rectangle (driver smoke test). |
+| `test_render` | Render the example docs to PNG (no printer) to eyeball fonts/layout. |
 
 ## Repository layout
 
 ```
-printer/      PD01 BLE driver + queue (Phase 1)
-jobs/         SQLite job log (Phase 1)
-render/       Markdown → 1-bit bitmap, font embed (Phase 2)
-validate/     Pre-render markdown validator (Phase 2)
-mcp/          MCP tool definitions (Phase 3)
-scripts/      Standalone CLI tools
-examples/     Sample markdown
+printer/    PD01 BLE driver + job queue
+jobs/       SQLite job log
+render/     Markdown/image → 1-bit bitmap, embedded fonts
+validate/   Pre-render markdown validator
+mcp/        MCP tool definitions
+web/        HTTP server + PWA
+scripts/    Standalone CLI tools
+examples/   Sample markdown
 ```
