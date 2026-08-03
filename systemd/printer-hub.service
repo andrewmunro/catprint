@@ -12,5 +12,11 @@ ExecStart=/home/andrew/projects/catprint/bin/catprint
 Restart=always
 RestartSec=5
 
+# Backstop, not a fix. A BLE scan leak once grew this process to ~27GB and
+# triggered a global OOM that froze the whole host. Cap it so the kernel kills
+# only this service and systemd restarts it.
+MemoryMax=512M
+MemoryHigh=384M
+
 [Install]
 WantedBy=multi-user.target

@@ -61,21 +61,24 @@ type Connection struct {
 }
 
 var (
-	enableOnce sync.Once
-	enableErr  error
+	enableMu sync.Mutex
+	enableOK bool
 )
 
-// enableAdapter enables the default adapter exactly once. tinygo's WinRT
-// backend cannot be re-enabled — a second Enable() after a failed connect
-// returns "Incorrect function." and corrupts adapter state. So enable once
-// and reuse for the process lifetime.
+// enableAdapter enables the default adapter. On Linux Enable() is idempotent
+// (it checks whether the adapter ID is already set), so retrying after a
+// failure is safe — needed because bluetoothd may not be ready at process
+// start. Once successful we skip subsequent calls (WinRT safety).
 func enableAdapter() (*bluetooth.Adapter, error) {
-	enableOnce.Do(func() {
-		enableErr = bluetooth.DefaultAdapter.Enable()
-	})
-	if enableErr != nil {
-		return nil, fmt.Errorf("failed to enable bluetooth adapter: %w", enableErr)
+	enableMu.Lock()
+	defer enableMu.Unlock()
+	if enableOK {
+		return bluetooth.DefaultAdapter, nil
 	}
+	if err := bluetooth.DefaultAdapter.Enable(); err != nil {
+		return nil, fmt.Errorf("failed to enable bluetooth adapter: %w", err)
+	}
+	enableOK = true
 	return bluetooth.DefaultAdapter, nil
 }
 
